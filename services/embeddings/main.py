@@ -6,7 +6,7 @@ from pydantic import BaseModel
 from sentence_transformers import SentenceTransformer
 
 logger = logging.getLogger(__name__)
-MODEL_NAME = os.getenv("EMBED_MODEL", "all-MiniLM-L6-v2")
+MODEL_NAME = os.getenv("EMBED_MODEL", "BAAI/bge-small-en-v1.5")
 
 model: SentenceTransformer | None = None
 

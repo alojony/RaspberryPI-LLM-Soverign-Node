@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Pi Sovereign Node</title>
+  <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --gb-dark:   #282828;
+      --gb-dark2:  #3c3836;
+      --gb-accent: #32302f;
+      --gb-light:  #ebdbb2;
+      --gb-blue:   #458588;
+      --gb-green:  #b8bb26;
+      --gb-red:    #fb4934;
+      --gb-orange: #d65d0e;
+      --gb-purple: #d3869b;
+      --gb-gray:   #928374;
+      --font-mono: 'Roboto Mono', monospace;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--gb-dark);
+      color: var(--gb-light);
+      font-family: var(--font-mono);
+      height: 100dvh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* ── Header ── */
+    header {
+      background: var(--gb-dark2);
+      border-bottom: 1px solid var(--gb-accent);
+      padding: 10px 16px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-shrink: 0;
+      z-index: 10;
+    }
+    .logo { font-size: 13px; font-weight: 700; color: var(--gb-orange); letter-spacing: 0.05em; text-transform: uppercase; flex: 1; }
+    .logo span { color: var(--gb-gray); font-weight: 400; }
+    .toggles { display: flex; gap: 8px; }
+    .toggle { font-family: var(--font-mono); font-size: 11px; font-weight: 700; letter-spacing: 0.08em; padding: 4px 10px; border-radius: 3px; border: 1px solid var(--gb-gray); background: transparent; color: var(--gb-gray); cursor: pointer; transition: all 0.15s; }
+    .toggle.active-rag { border-color: var(--gb-green); color: var(--gb-green); }
+    .toggle.active-web { border-color: var(--gb-blue); color: var(--gb-blue); }
+    .toggle:hover { opacity: 0.85; }
+
+    /* ── Layout ── */
+    .layout { display: flex; flex: 1; overflow: hidden; }
+
+    /* ── Sidebar ── */
+    #sidebar {
+      width: 220px;
+      flex-shrink: 0;
+      background: var(--gb-accent);
+      border-right: 1px solid var(--gb-dark2);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    #new-chat {
+      margin: 10px;
+      padding: 8px 12px;
+      background: transparent;
+      border: 1px solid var(--gb-orange);
+      color: var(--gb-orange);
+      font-family: var(--font-mono);
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      border-radius: 3px;
+      cursor: pointer;
+      text-align: left;
+      transition: opacity 0.15s;
+    }
+    #new-chat:hover { opacity: 0.75; }
+    #conv-list { flex: 1; overflow-y: auto; padding: 0 6px 10px; }
+    #conv-list::-webkit-scrollbar { width: 4px; }
+    #conv-list::-webkit-scrollbar-thumb { background: var(--gb-dark2); border-radius: 2px; }
+    .conv-group-label { font-size: 9px; color: var(--gb-gray); letter-spacing: 0.1em; text-transform: uppercase; padding: 10px 6px 4px; }
+    .conv-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 7px 8px;
+      border-radius: 3px;
+      cursor: pointer;
+      transition: background 0.1s;
+      position: relative;
+    }
+    .conv-item:hover { background: var(--gb-dark2); }
+    .conv-item.active { background: var(--gb-dark2); border-left: 2px solid var(--gb-orange); padding-left: 6px; }
+    .conv-title { font-size: 11px; color: var(--gb-light); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .conv-del { font-size: 11px; color: var(--gb-gray); background: none; border: none; cursor: pointer; padding: 0 2px; display: none; line-height: 1; }
+    .conv-item:hover .conv-del { display: block; }
+    .conv-del:hover { color: var(--gb-red); }
+
+    /* ── Main ── */
+    .main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+
+    /* ── Chat ── */
+    #chat { flex: 1; overflow-y: auto; padding: 24px 20px; display: flex; flex-direction: column; gap: 20px; scroll-behavior: smooth; }
+    #chat::-webkit-scrollbar { width: 6px; }
+    #chat::-webkit-scrollbar-track { background: var(--gb-dark); }
+    #chat::-webkit-scrollbar-thumb { background: var(--gb-dark2); border-radius: 3px; }
+
+    .msg { display: flex; flex-direction: column; max-width: 78%; }
+    .msg.user { align-self: flex-end; align-items: flex-end; }
+    .msg.bot  { align-self: flex-start; align-items: flex-start; }
+    .bubble { padding: 12px 16px; border-radius: 6px; font-size: 13px; line-height: 1.7; white-space: pre-wrap; word-break: break-word; }
+    .msg.user .bubble { background: var(--gb-dark2); color: var(--gb-light); border: 1px solid var(--gb-accent); }
+    .msg.bot  .bubble { background: var(--gb-accent); color: var(--gb-light); border: 1px solid var(--gb-dark2); }
+    .meta { margin-top: 6px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+    .latency { font-size: 10px; color: var(--gb-gray); }
+    .source { font-size: 10px; color: var(--gb-purple); background: var(--gb-dark2); border: 1px solid var(--gb-purple); border-radius: 3px; padding: 2px 6px; text-decoration: none; max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: inline-block; }
+    .source:hover { opacity: 0.75; }
+    .thinking .bubble { color: var(--gb-orange); border-color: var(--gb-orange); }
+    .dots::after { content: ''; animation: dots 1.2s steps(3, end) infinite; }
+    @keyframes dots { 0% { content: '.'; } 33% { content: '..'; } 66% { content: '...'; } 100% { content: ''; } }
+    .error .bubble { color: var(--gb-red); border-color: var(--gb-red); background: var(--gb-dark); }
+
+    /* ── Empty state ── */
+    .empty { margin: auto; text-align: center; color: var(--gb-gray); }
+    .empty .prompt { font-size: 22px; margin-bottom: 10px; color: var(--gb-orange); }
+    .empty p { font-size: 12px; line-height: 1.8; }
+    .empty code { color: var(--gb-green); background: var(--gb-dark2); padding: 1px 5px; border-radius: 3px; }
+
+    /* ── Input bar ── */
+    footer { background: var(--gb-dark2); border-top: 1px solid var(--gb-accent); padding: 12px 20px; display: flex; gap: 10px; flex-shrink: 0; }
+    #input { flex: 1; background: var(--gb-dark); color: var(--gb-light); font-family: var(--font-mono); font-size: 13px; border: 1px solid var(--gb-accent); border-radius: 4px; padding: 10px 14px; outline: none; resize: none; line-height: 1.5; min-height: 42px; max-height: 120px; overflow-y: auto; transition: border-color 0.15s; }
+    #input:focus { border-color: var(--gb-blue); }
+    #input::placeholder { color: var(--gb-gray); }
+    #send { background: var(--gb-blue); color: var(--gb-dark); font-family: var(--font-mono); font-size: 13px; font-weight: 700; border: none; border-radius: 4px; padding: 0 18px; cursor: pointer; transition: opacity 0.15s; flex-shrink: 0; }
+    #send:hover { opacity: 0.85; }
+    #send:disabled { opacity: 0.4; cursor: not-allowed; }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo">Pi Sovereign Node <span>// local assistant</span></div>
+  <div class="toggles">
+    <button class="toggle active-rag" id="btn-rag" title="Toggle RAG">RAG</button>
+    <button class="toggle" id="btn-web" title="Toggle web search">WEB</button>
+  </div>
+</header>
+
+<div class="layout">
+  <nav id="sidebar">
+    <button id="new-chat">+ new chat</button>
+    <div id="conv-list"></div>
+  </nav>
+  <div class="main">
+    <div id="chat">
+      <div class="empty" id="empty">
+        <div class="prompt">></div>
+        <p>Ask anything from your vault.<br>
+        Toggle <code>RAG</code> to search your notes.<br>
+        Toggle <code>WEB</code> to search the web.</p>
+      </div>
+    </div>
+    <footer>
+      <textarea id="input" rows="1" placeholder="ask something..."></textarea>
+      <button id="send">send</button>
+    </footer>
+  </div>
+</div>
+
+<script>
+  const chat    = document.getElementById('chat');
+  const empty   = document.getElementById('empty');
+  const input   = document.getElementById('input');
+  const sendBtn = document.getElementById('send');
+  const btnRag  = document.getElementById('btn-rag');
+  const btnWeb  = document.getElementById('btn-web');
+  const convList = document.getElementById('conv-list');
+
+  let useRag = true;
+  let useWeb = false;
+  let currentConvId = null;
+
+  // ── Toggles ──
+  btnRag.addEventListener('click', () => { useRag = !useRag; btnRag.classList.toggle('active-rag', useRag); });
+  btnWeb.addEventListener('click', () => { useWeb = !useWeb; btnWeb.classList.toggle('active-web', useWeb); });
+
+  // ── Auto-resize textarea ──
+  input.addEventListener('input', () => { input.style.height = 'auto'; input.style.height = Math.min(input.scrollHeight, 120) + 'px'; });
+  input.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } });
+  sendBtn.addEventListener('click', send);
+
+  // ── New chat ──
+  document.getElementById('new-chat').addEventListener('click', () => {
+    currentConvId = null;
+    chat.innerHTML = '';
+    chat.appendChild(empty);
+    empty.style.display = '';
+    document.querySelectorAll('.conv-item').forEach(el => el.classList.remove('active'));
+    input.focus();
+  });
+
+  // ── Load sidebar ──
+  async function loadConversations() {
+    const res = await fetch('/conversations');
+    if (!res.ok) return;
+    const convs = await res.json();
+    renderSidebar(convs);
+  }
+
+  function groupConversations(convs) {
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const yesterday = new Date(today); yesterday.setDate(today.getDate() - 1);
+    const week = new Date(today); week.setDate(today.getDate() - 7);
+
+    const groups = { Today: [], Yesterday: [], 'This week': [], Older: [] };
+    for (const c of convs) {
+      const d = new Date(c.updated_at);
+      if (d >= today) groups['Today'].push(c);
+      else if (d >= yesterday) groups['Yesterday'].push(c);
+      else if (d >= week) groups['This week'].push(c);
+      else groups['Older'].push(c);
+    }
+    return groups;
+  }
+
+  function renderSidebar(convs) {
+    convList.innerHTML = '';
+    const groups = groupConversations(convs);
+    for (const [label, items] of Object.entries(groups)) {
+      if (!items.length) continue;
+      const lbl = document.createElement('div');
+      lbl.className = 'conv-group-label';
+      lbl.textContent = label;
+      convList.appendChild(lbl);
+      for (const c of items) {
+        const item = document.createElement('div');
+        item.className = 'conv-item' + (c.id === currentConvId ? ' active' : '');
+        item.dataset.id = c.id;
+
+        const title = document.createElement('span');
+        title.className = 'conv-title';
+        title.textContent = c.title;
+
+        const del = document.createElement('button');
+        del.className = 'conv-del';
+        del.textContent = '×';
+        del.title = 'Delete';
+        del.addEventListener('click', async e => {
+          e.stopPropagation();
+          await fetch(`/conversations/${c.id}`, { method: 'DELETE' });
+          if (currentConvId === c.id) {
+            currentConvId = null;
+            chat.innerHTML = '';
+            chat.appendChild(empty);
+            empty.style.display = '';
+          }
+          loadConversations();
+        });
+
+        item.appendChild(title);
+        item.appendChild(del);
+        item.addEventListener('click', () => loadConversation(c.id));
+        convList.appendChild(item);
+      }
+    }
+  }
+
+  async function loadConversation(id) {
+    const res = await fetch(`/conversations/${id}`);
+    if (!res.ok) return;
+    const data = await res.json();
+    currentConvId = id;
+
+    chat.innerHTML = '';
+    empty.style.display = 'none';
+    chat.appendChild(empty);
+
+    for (const msg of data.messages) {
+      if (msg.role === 'user') {
+        addMsg('user', msg.content);
+      } else {
+        addMsg('bot', msg.content, { latency: msg.latency_ms, sources: msg.sources });
+      }
+    }
+    chat.scrollTop = chat.scrollHeight;
+
+    document.querySelectorAll('.conv-item').forEach(el => {
+      el.classList.toggle('active', parseInt(el.dataset.id) === id);
+    });
+    input.focus();
+  }
+
+  // ── Render helpers ──
+  function addMsg(role, text, meta = {}) {
+    empty.style.display = 'none';
+    const wrap = document.createElement('div');
+    wrap.className = `msg ${role}`;
+    const bubble = document.createElement('div');
+    bubble.className = 'bubble';
+    bubble.textContent = text;
+    wrap.appendChild(bubble);
+
+    if (meta.latency != null || (meta.sources && meta.sources.length)) {
+      const m = document.createElement('div');
+      m.className = 'meta';
+      if (meta.latency != null) {
+        const lat = document.createElement('span');
+        lat.className = 'latency';
+        lat.textContent = `${(meta.latency / 1000).toFixed(1)}s`;
+        m.appendChild(lat);
+      }
+      (meta.sources || []).forEach(src => {
+        const a = document.createElement('a');
+        a.className = 'source';
+        a.textContent = src;
+        if (src.startsWith('http')) { a.href = src; a.target = '_blank'; a.rel = 'noopener'; }
+        else { a.href = '#'; a.title = src; }
+        m.appendChild(a);
+      });
+      wrap.appendChild(m);
+    }
+    chat.appendChild(wrap);
+    chat.scrollTop = chat.scrollHeight;
+    return wrap;
+  }
+
+  function addThinking() {
+    const wrap = document.createElement('div');
+    wrap.className = 'msg bot thinking';
+    const bubble = document.createElement('div');
+    bubble.className = 'bubble';
+    bubble.innerHTML = 'thinking<span class="dots"></span>';
+    wrap.appendChild(bubble);
+    chat.appendChild(wrap);
+    chat.scrollTop = chat.scrollHeight;
+    return wrap;
+  }
+
+  // ── Send ──
+  async function send() {
+    const text = input.value.trim();
+    if (!text || sendBtn.disabled) return;
+
+    input.value = '';
+    input.style.height = 'auto';
+    sendBtn.disabled = true;
+
+    addMsg('user', text);
+    const thinking = addThinking();
+
+    try {
+      const res = await fetch('/ask/stream', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: text, use_rag: useRag, use_web: useWeb, conversation_id: currentConvId }),
+      });
+
+      if (!res.ok) throw new Error(`${res.status}: ${await res.text()}`);
+
+      thinking.remove();
+      const botWrap = document.createElement('div');
+      botWrap.className = 'msg bot';
+      const bubble = document.createElement('div');
+      bubble.className = 'bubble';
+      botWrap.appendChild(bubble);
+      chat.appendChild(botWrap);
+      const meta = document.createElement('div');
+      meta.className = 'meta';
+      botWrap.appendChild(meta);
+
+      let sources = [];
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buf = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        const lines = buf.split('\n');
+        buf = lines.pop();
+
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          const ev = JSON.parse(line.slice(6));
+
+          if (ev.type === 'token') {
+            bubble.textContent += ev.token;
+            chat.scrollTop = chat.scrollHeight;
+          } else if (ev.type === 'sources') {
+            sources = ev.sources || [];
+          } else if (ev.type === 'done') {
+            if (ev.conversation_id && ev.conversation_id !== currentConvId) {
+              currentConvId = ev.conversation_id;
+              loadConversations();
+            } else if (ev.conversation_id) {
+              // update updated_at ordering in sidebar
+              loadConversations();
+            }
+            const lat = document.createElement('span');
+            lat.className = 'latency';
+            lat.textContent = `${(ev.latency_ms / 1000).toFixed(1)}s`;
+            meta.appendChild(lat);
+            sources.forEach(src => {
+              const a = document.createElement('a');
+              a.className = 'source';
+              a.textContent = src;
+              if (src.startsWith('http')) { a.href = src; a.target = '_blank'; a.rel = 'noopener'; }
+              else { a.href = '#'; a.title = src; }
+              meta.appendChild(a);
+            });
+          }
+        }
+      }
+    } catch (err) {
+      thinking.remove();
+      const wrap = addMsg('bot', `error: ${err.message}`);
+      wrap.classList.add('error');
+    } finally {
+      sendBtn.disabled = false;
+      input.focus();
+    }
+  }
+
+  // ── Init ──
+  loadConversations();
+  input.focus();
+</script>
+</body>
+</html>

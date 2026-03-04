@@ -2,7 +2,7 @@ services:
 
   # ── LLM Runtime (llama.cpp server) ──────────────────────────
   llm:
-    image: ghcr.io/ggerganov/llama.cpp:server
+    image: ghcr.io/ggml-org/llama.cpp:server
     container_name: pi-llm
     restart: unless-stopped
     volumes:
@@ -75,7 +75,7 @@ services:
     env_file: .env
     volumes:
       - ./data/db:/data/db
-      - ./data/vault:/data/vault:ro
+      - ${VAULT_HOST_PATH:-./data/vault}:/data/vault:ro
     ports:
       - "${API_PORT:-8000}:8000"
     depends_on:
