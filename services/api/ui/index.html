@@ -137,6 +137,206 @@
     #send { background: var(--gb-blue); color: var(--gb-dark); font-family: var(--font-mono); font-size: 13px; font-weight: 700; border: none; border-radius: 4px; padding: 0 18px; cursor: pointer; transition: opacity 0.15s; flex-shrink: 0; }
     #send:hover { opacity: 0.85; }
     #send:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    /* ── Tab bar ── */
+    .tab-bar {
+      background: var(--gb-dark2);
+      border-bottom: 1px solid var(--gb-accent);
+      display: flex;
+      gap: 0;
+      flex-shrink: 0;
+      padding: 0 16px;
+    }
+    .tab {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      padding: 8px 16px;
+      border: none;
+      border-bottom: 2px solid transparent;
+      background: transparent;
+      color: var(--gb-gray);
+      cursor: pointer;
+      transition: color 0.15s, border-color 0.15s;
+      text-transform: uppercase;
+    }
+    .tab:hover { color: var(--gb-light); }
+    .tab.active-chat      { color: var(--gb-orange); border-bottom-color: var(--gb-orange); }
+    .tab.active-reminders { color: var(--gb-green);  border-bottom-color: var(--gb-green); }
+    .tab.active-calendar  { color: var(--gb-blue);   border-bottom-color: var(--gb-blue); }
+
+    /* ── Reminders view ── */
+    #view-reminders {
+      display: none;
+      flex: 1;
+      flex-direction: column;
+      overflow: hidden;
+      padding: 24px 28px;
+      gap: 24px;
+      overflow-y: auto;
+    }
+    .remind-form {
+      background: var(--gb-accent);
+      border: 1px solid var(--gb-dark2);
+      border-radius: 4px;
+      padding: 16px 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .remind-form-title {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      color: var(--gb-green);
+      text-transform: uppercase;
+      margin-bottom: 4px;
+    }
+    .remind-row {
+      display: flex;
+      gap: 10px;
+      align-items: flex-end;
+      flex-wrap: wrap;
+    }
+    .remind-input {
+      flex: 1;
+      min-width: 180px;
+      background: var(--gb-dark);
+      color: var(--gb-light);
+      font-family: var(--font-mono);
+      font-size: 13px;
+      border: 1px solid var(--gb-accent);
+      border-radius: 4px;
+      padding: 8px 12px;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    .remind-input:focus { border-color: var(--gb-green); }
+    .remind-input::placeholder { color: var(--gb-gray); }
+    .remind-select {
+      background: var(--gb-dark);
+      color: var(--gb-light);
+      font-family: var(--font-mono);
+      font-size: 12px;
+      border: 1px solid var(--gb-accent);
+      border-radius: 4px;
+      padding: 8px 10px;
+      outline: none;
+      cursor: pointer;
+    }
+    .remind-select:focus { border-color: var(--gb-green); }
+    .btn-add-remind {
+      background: var(--gb-green);
+      color: var(--gb-dark);
+      font-family: var(--font-mono);
+      font-size: 12px;
+      font-weight: 700;
+      border: none;
+      border-radius: 4px;
+      padding: 8px 18px;
+      cursor: pointer;
+      transition: opacity 0.15s;
+      flex-shrink: 0;
+    }
+    .btn-add-remind:hover { opacity: 0.85; }
+    .remind-section-title {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      color: var(--gb-gray);
+      text-transform: uppercase;
+      margin-bottom: 6px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .remind-count {
+      font-size: 10px;
+      color: var(--gb-green);
+      background: var(--gb-dark2);
+      border-radius: 10px;
+      padding: 1px 7px;
+    }
+    .remind-list { display: flex; flex-direction: column; gap: 6px; }
+    .remind-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      background: var(--gb-accent);
+      border: 1px solid var(--gb-dark2);
+      border-radius: 4px;
+      padding: 10px 14px;
+      transition: opacity 0.15s;
+    }
+    .remind-item.done { opacity: 0.4; }
+    .remind-item-text { flex: 1; font-size: 13px; color: var(--gb-light); }
+    .remind-item-time { font-size: 10px; color: var(--gb-gray); white-space: nowrap; }
+    .remind-item-recur {
+      font-size: 10px;
+      color: var(--gb-blue);
+      background: var(--gb-dark2);
+      border-radius: 3px;
+      padding: 1px 6px;
+    }
+    .btn-done {
+      background: none;
+      border: 1px solid var(--gb-gray);
+      color: var(--gb-gray);
+      font-family: var(--font-mono);
+      font-size: 11px;
+      border-radius: 3px;
+      padding: 3px 8px;
+      cursor: pointer;
+      transition: all 0.15s;
+      flex-shrink: 0;
+    }
+    .btn-done:hover { border-color: var(--gb-green); color: var(--gb-green); }
+    .remind-empty { font-size: 12px; color: var(--gb-gray); padding: 12px 0; }
+    .show-completed-btn {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--gb-gray);
+      background: none;
+      border: none;
+      cursor: pointer;
+      padding: 4px 0;
+      text-decoration: underline;
+      text-underline-offset: 3px;
+    }
+    .show-completed-btn:hover { color: var(--gb-light); }
+
+    /* ── Calendar placeholder ── */
+    #view-calendar {
+      display: none;
+      flex: 1;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      gap: 16px;
+      color: var(--gb-gray);
+      text-align: center;
+    }
+    .cal-placeholder-title {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--gb-blue);
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+    .cal-placeholder-body {
+      font-size: 12px;
+      line-height: 1.9;
+    }
+    .cal-badge {
+      font-size: 11px;
+      border: 1px solid var(--gb-blue);
+      color: var(--gb-blue);
+      border-radius: 3px;
+      padding: 2px 8px;
+      display: inline-block;
+      margin: 2px 4px;
+    }
   </style>
 </head>
 <body>
@@ -149,24 +349,74 @@
   </div>
 </header>
 
+<div class="tab-bar">
+  <button class="tab active-chat" id="tab-chat">chat</button>
+  <button class="tab"             id="tab-reminders">reminders</button>
+  <button class="tab"             id="tab-calendar">calendar</button>
+</div>
+
 <div class="layout">
   <nav id="sidebar">
     <button id="new-chat">+ new chat</button>
     <div id="conv-list"></div>
   </nav>
   <div class="main">
-    <div id="chat">
-      <div class="empty" id="empty">
-        <div class="prompt">></div>
-        <p>Ask anything from your vault.<br>
-        Toggle <code>RAG</code> to search your notes.<br>
-        Toggle <code>WEB</code> to search the web.</p>
+    <div id="view-chat" style="display:flex; flex:1; flex-direction:column; overflow:hidden;">
+      <div id="chat">
+        <div class="empty" id="empty">
+          <div class="prompt">></div>
+          <p>Ask anything from your vault.<br>
+          Toggle <code>RAG</code> to search your notes.<br>
+          Toggle <code>WEB</code> to search the web.</p>
+        </div>
+      </div>
+      <footer>
+        <textarea id="input" rows="1" placeholder="ask something..."></textarea>
+        <button id="send">send</button>
+      </footer>
+    </div>
+
+    <div id="view-reminders">
+      <div class="remind-form">
+        <div class="remind-form-title">+ new reminder</div>
+        <div class="remind-row">
+          <input id="remind-text" class="remind-input" type="text" placeholder="what to remind you about..." />
+          <input id="remind-at" class="remind-input" type="datetime-local" style="flex:0; min-width:190px;" />
+          <select id="remind-recur" class="remind-select">
+            <option value="">once</option>
+            <option value="daily">daily</option>
+            <option value="weekly">weekly</option>
+          </select>
+          <button class="btn-add-remind" id="btn-add-remind">add</button>
+        </div>
+      </div>
+
+      <div>
+        <div class="remind-section-title">
+          pending <span class="remind-count" id="remind-pending-count">0</span>
+        </div>
+        <div class="remind-list" id="remind-pending-list"></div>
+      </div>
+
+      <div>
+        <button class="show-completed-btn" id="show-completed-btn">show completed</button>
+        <div id="completed-section" style="display:none; margin-top:10px;">
+          <div class="remind-section-title">completed</div>
+          <div class="remind-list" id="remind-completed-list"></div>
+        </div>
       </div>
     </div>
-    <footer>
-      <textarea id="input" rows="1" placeholder="ask something..."></textarea>
-      <button id="send">send</button>
-    </footer>
+
+    <div id="view-calendar">
+      <div class="cal-placeholder-title">calendar</div>
+      <div class="cal-placeholder-body">
+        Integrations coming soon.<br><br>
+        <span class="cal-badge">Notion Calendar</span>
+        <span class="cal-badge">Google Calendar</span><br><br>
+        Events from your connected calendars<br>
+        will appear here in a week view.
+      </div>
+    </div>
   </div>
 </div>
 
@@ -433,7 +683,140 @@
     }
   }
 
+  // ── Tab switching ──
+  const tabChat       = document.getElementById('tab-chat');
+  const tabReminders  = document.getElementById('tab-reminders');
+  const tabCalendar   = document.getElementById('tab-calendar');
+  const viewChat      = document.getElementById('view-chat');
+  const viewReminders = document.getElementById('view-reminders');
+  const viewCalendar  = document.getElementById('view-calendar');
+  const sidebar       = document.getElementById('sidebar');
+
+  function showTab(name) {
+    [tabChat, tabReminders, tabCalendar].forEach(t => t.className = 'tab');
+    viewChat.style.display      = 'none';
+    viewReminders.style.display = 'none';
+    viewCalendar.style.display  = 'none';
+
+    if (name === 'chat') {
+      tabChat.classList.add('active-chat');
+      viewChat.style.display = 'flex';
+      sidebar.style.display  = '';
+    } else if (name === 'reminders') {
+      tabReminders.classList.add('active-reminders');
+      viewReminders.style.display = 'flex';
+      sidebar.style.display = 'none';
+      loadReminders();
+    } else if (name === 'calendar') {
+      tabCalendar.classList.add('active-calendar');
+      viewCalendar.style.display = 'flex';
+      sidebar.style.display = 'none';
+    }
+  }
+
+  tabChat.addEventListener('click',      () => showTab('chat'));
+  tabReminders.addEventListener('click', () => showTab('reminders'));
+  tabCalendar.addEventListener('click',  () => showTab('calendar'));
+
+  // ── Reminders ──
+  async function loadReminders() {
+    const [pendingRes, doneRes] = await Promise.all([
+      fetch('/reminders?done=false'),
+      fetch('/reminders?done=true'),
+    ]);
+    const pending   = pendingRes.ok ? await pendingRes.json() : [];
+    const completed = doneRes.ok    ? await doneRes.json()    : [];
+
+    document.getElementById('remind-pending-count').textContent = pending.length;
+    renderReminderList('remind-pending-list',   pending,   false);
+    renderReminderList('remind-completed-list', completed, true);
+  }
+
+  function formatReminderTime(iso) {
+    const d = new Date(iso);
+    const now = new Date();
+    const diff = d - now;
+    if (diff > 0 && diff < 60000)    return 'in <1 min';
+    if (diff > 0 && diff < 3600000)  return `in ${Math.round(diff/60000)}m`;
+    if (diff > 0 && diff < 86400000) return `today ${d.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}`;
+    return d.toLocaleString([], {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'});
+  }
+
+  function renderReminderList(containerId, items, isDone) {
+    const el = document.getElementById(containerId);
+    el.innerHTML = '';
+    if (!items.length) {
+      const empty = document.createElement('div');
+      empty.className = 'remind-empty';
+      empty.textContent = isDone ? 'no completed reminders' : 'no pending reminders';
+      el.appendChild(empty);
+      return;
+    }
+    for (const r of items) {
+      const item = document.createElement('div');
+      item.className = 'remind-item' + (isDone ? ' done' : '');
+
+      const textSpan = document.createElement('span');
+      textSpan.className = 'remind-item-text';
+      textSpan.textContent = r.text;
+
+      const timeSpan = document.createElement('span');
+      timeSpan.className = 'remind-item-time';
+      timeSpan.textContent = formatReminderTime(r.trigger_at);
+
+      item.appendChild(textSpan);
+      item.appendChild(timeSpan);
+
+      if (r.recurring) {
+        const recur = document.createElement('span');
+        recur.className = 'remind-item-recur';
+        recur.textContent = r.recurring;
+        item.appendChild(recur);
+      }
+
+      if (!isDone) {
+        const doneBtn = document.createElement('button');
+        doneBtn.className = 'btn-done';
+        doneBtn.textContent = 'done';
+        doneBtn.addEventListener('click', async () => {
+          await fetch(`/reminders/${r.id}/done`, { method: 'PATCH' });
+          loadReminders();
+        });
+        item.appendChild(doneBtn);
+      }
+
+      el.appendChild(item);
+    }
+  }
+
+  document.getElementById('btn-add-remind').addEventListener('click', async () => {
+    const text  = document.getElementById('remind-text').value.trim();
+    const atRaw = document.getElementById('remind-at').value;
+    const recur = document.getElementById('remind-recur').value || null;
+    if (!text || !atRaw) return;
+
+    const trigger_at = new Date(atRaw).toISOString();
+    await fetch('/remind', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text, trigger_at, recurring: recur }),
+    });
+    document.getElementById('remind-text').value = '';
+    document.getElementById('remind-at').value = '';
+    document.getElementById('remind-recur').value = '';
+    loadReminders();
+  });
+
+  document.getElementById('show-completed-btn').addEventListener('click', () => {
+    const sec = document.getElementById('completed-section');
+    const btn = document.getElementById('show-completed-btn');
+    const hidden = sec.style.display === 'none';
+    sec.style.display = hidden ? 'block' : 'none';
+    btn.textContent = hidden ? 'hide completed' : 'show completed';
+  });
+
   // ── Init ──
+  showTab('chat');
   loadConversations();
   input.focus();
 </script>

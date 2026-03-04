@@ -453,6 +453,13 @@ def delete_timer(timer_id: int, db: Session = Depends(get_db)):
     return {"ok": True}
 
 
+# ── Calendar ─────────────────────────────────────────────────
+
+@app.get("/calendar")
+async def get_calendar():
+    return {"events": [], "sources": []}
+
+
 # ── Ingestion ────────────────────────────────────────────────
 
 @app.post("/ingest", response_model=IngestResponse)
