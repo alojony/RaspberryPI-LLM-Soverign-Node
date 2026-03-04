@@ -3,7 +3,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
 from apscheduler.jobstores.base import JobLookupError
 import os
-from database import SessionLocal, TimerDB
+from database import SessionLocal, TimerDB, ReminderDB
 
 logger = logging.getLogger(__name__)
 
@@ -17,7 +17,14 @@ scheduler = AsyncIOScheduler(
 
 async def fire_reminder(reminder_id: int, text: str):
     logger.info(f"[REMINDER] #{reminder_id}: {text}")
-    # TODO: push to UI notification / websocket
+    db = SessionLocal()
+    try:
+        record = db.query(ReminderDB).filter(ReminderDB.id == reminder_id).first()
+        if record and not record.recurring:
+            record.completed = True
+            db.commit()
+    finally:
+        db.close()
 
 
 def schedule_reminder(reminder_id: int, text: str, trigger_at, recurring: str | None):

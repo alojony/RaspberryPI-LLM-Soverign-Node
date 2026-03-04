@@ -353,11 +353,15 @@
     const thinking = addThinking();
 
     try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 180000);
       const res = await fetch('/ask/stream', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ prompt: text, use_rag: useRag, use_web: useWeb, conversation_id: currentConvId }),
+        signal: controller.signal,
       });
+      clearTimeout(timeoutId);
 
       if (!res.ok) throw new Error(`${res.status}: ${await res.text()}`);
 
@@ -418,7 +422,10 @@
       }
     } catch (err) {
       thinking.remove();
-      const wrap = addMsg('bot', `error: ${err.message}`);
+      const msg = err.name === 'AbortError'
+        ? 'Request timed out — the model may be busy. Try a shorter message.'
+        : `error: ${err.message}`;
+      const wrap = addMsg('bot', msg);
       wrap.classList.add('error');
     } finally {
       sendBtn.disabled = false;

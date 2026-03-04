@@ -4,6 +4,7 @@ import uuid
 import hashlib
 import logging
 import json
+import asyncio
 import pytz
 import httpx
 from contextlib import asynccontextmanager
@@ -37,6 +38,35 @@ CHUNK_SIZE = int(os.getenv("CHUNK_SIZE", "1600"))
 CHUNK_OVERLAP = int(os.getenv("CHUNK_OVERLAP", "400"))
 EMBED_DIM = int(os.getenv("EMBED_DIM", "384"))
 
+TOKEN_BUDGET = 3400
+
+SYSTEM_PROMPT_RAG = (
+    "You are a sharp, capable assistant running on a Raspberry Pi 5 — fast, precise, and privacy-first. "
+    "Your owner has given you access to their personal knowledge vault.\n\n"
+    "Answer directly and confidently. No filler, no 'Great question!', no hedging when you know the answer. "
+    "If the context contains relevant information, use it and cite the source file path. "
+    "If the context is not helpful, say so briefly and answer from general knowledge. "
+    "Keep answers concise unless detail is clearly needed. "
+    "You can be a little witty when it fits — but stay sharp and useful above all."
+)
+
+SYSTEM_PROMPT_WEB = (
+    "You are a sharp, capable assistant running on a Raspberry Pi 5 — fast, precise, and privacy-first. "
+    "You have access to your owner's knowledge vault and live web results.\n\n"
+    "Answer directly and confidently. No filler, no hedging when you know the answer. "
+    "Use vault context and web results as evidence — cite file paths for vault sources and URLs for web sources. "
+    "Note when web content was retrieved. If sources conflict, flag it briefly. "
+    "Keep answers concise unless detail is clearly needed. "
+    "You can be a little witty when it fits — but stay sharp and useful above all."
+)
+
+SYSTEM_PROMPT_PLAIN = (
+    "You are a sharp, capable assistant running on a Raspberry Pi 5 — fast, precise, and privacy-first.\n\n"
+    "Answer directly and confidently. No filler, no 'Great question!', no unnecessary hedging. "
+    "Keep answers concise unless detail is clearly needed. "
+    "You can be a little witty when it fits — but stay sharp and useful above all."
+)
+
 qdrant: QdrantClient = None
 
 
@@ -56,6 +86,17 @@ async def lifespan(app: FastAPI):
         logger.info(f"Qdrant collection exists: {COLLECTION}")
     scheduler.start()
     logger.info("Scheduler started")
+    _db = SessionLocal()
+    try:
+        pending = _db.query(ReminderDB).filter(
+            ReminderDB.completed == False,
+            ReminderDB.trigger_at > datetime.now(),
+        ).all()
+        for r in pending:
+            schedule_reminder(r.id, r.text, r.trigger_at, r.recurring)
+        logger.info(f"Re-scheduled {len(pending)} reminder(s) on startup")
+    finally:
+        _db.close()
     yield
     scheduler.shutdown()
 
@@ -78,9 +119,13 @@ CONVERSATIONAL = {"hi", "hello", "hey", "thanks", "thank you", "ok", "okay", "by
 def _is_simple(prompt: str) -> bool:
     return len(prompt.strip()) < 20 or prompt.strip().lower() in CONVERSATIONAL
 
-async def _build_context(req: AskRequest) -> tuple[str, list[str]]:
+def _estimate_tokens(text: str) -> int:
+    return max(1, len(text) // 4)
+
+async def _build_context(req: AskRequest) -> tuple[list[str], list[str], list[str]]:
+    rag_chunks: list[str] = []
+    web_snippets: list[str] = []
     sources: list[str] = []
-    context = ""
 
     if req.use_rag and not _is_simple(req.prompt):
         async with httpx.AsyncClient(timeout=30) as client:
@@ -89,7 +134,9 @@ async def _build_context(req: AskRequest) -> tuple[str, list[str]]:
             query_vector = embed_resp.json()["embedding"]
         results = qdrant.search(collection_name=COLLECTION, query_vector=query_vector, limit=5)
         for hit in results:
-            context += f"\n---\n{hit.payload.get('text', '')}"
+            chunk_text = hit.payload.get("text", "")
+            if chunk_text:
+                rag_chunks.append(chunk_text)
             src = hit.payload.get("file_path", "")
             if src:
                 sources.append(src)
@@ -98,29 +145,53 @@ async def _build_context(req: AskRequest) -> tuple[str, list[str]]:
         try:
             with DDGS() as ddgs:
                 web_results = list(ddgs.text(req.prompt, max_results=3))
-            web_snippets = []
             for r in web_results:
                 url = r.get("href", "")
-                downloaded = trafilatura.fetch_url(url, timeout=10)
+                downloaded = await asyncio.to_thread(trafilatura.fetch_url, url, timeout=10)
                 text = trafilatura.extract(downloaded, max_chars=1500) if downloaded else r.get("body", "")
                 if text:
                     web_snippets.append(f"[WEB: {url}]\n{text}")
                     sources.append(url)
-            if web_snippets:
-                web_context = "\n---\n".join(web_snippets)
-                context = (context + "\n---\n" + web_context).strip() if context else web_context
         except Exception as e:
             logger.warning(f"Web search failed: {e}")
 
-    return context, list(dict.fromkeys(sources))
+    return rag_chunks, web_snippets, list(dict.fromkeys(sources))
 
-def _build_prompt(req: AskRequest, context: str) -> tuple[str, str]:
-    system = (
-        "You are a concise local assistant. Answer using the provided context. "
-        "Cite sources. If web results are included, note when retrieved."
-        if req.use_web else
-        "You are a concise local assistant. Answer using the provided context. Cite sources."
-    )
+def _truncate_to_budget(rag_chunks: list[str], web_snippets: list[str], system_prompt: str, question: str) -> str:
+    fixed_tokens = _estimate_tokens(system_prompt) + _estimate_tokens(question)
+    remaining = TOKEN_BUDGET - fixed_tokens
+
+    selected_rag: list[str] = []
+    for chunk in rag_chunks:
+        cost = _estimate_tokens(chunk)
+        if cost > remaining:
+            break
+        selected_rag.append(chunk)
+        remaining -= cost
+
+    selected_web: list[str] = []
+    for snippet in web_snippets:
+        cost = _estimate_tokens(snippet)
+        if cost > remaining:
+            break
+        selected_web.append(snippet)
+        remaining -= cost
+
+    total_used = TOKEN_BUDGET - fixed_tokens - remaining
+    logger.info(f"[TOKENS] estimated: {fixed_tokens + total_used}, rag_chunks: {len(selected_rag)}, web_snippets: {len(selected_web)}")
+
+    parts = selected_rag + selected_web
+    return "\n---\n".join(parts) if parts else ""
+
+def _build_prompt(req: AskRequest, rag_chunks: list[str], web_snippets: list[str]) -> tuple[str, str]:
+    if req.use_web:
+        system = SYSTEM_PROMPT_WEB
+    elif rag_chunks or web_snippets:
+        system = SYSTEM_PROMPT_RAG
+    else:
+        system = SYSTEM_PROMPT_PLAIN
+
+    context = _truncate_to_budget(rag_chunks, web_snippets, system, req.prompt)
     full_prompt = f"[CONTEXT]\n{context}\n\n[QUESTION]\n{req.prompt}" if context else req.prompt
     return system, full_prompt
 
@@ -132,10 +203,10 @@ LLM_STOP = ["<|user|>", "<|im_end|>", "<|im_start|>"]
 @app.post("/ask", response_model=AskResponse)
 async def ask(req: AskRequest):
     t0 = time.monotonic()
-    context, sources = await _build_context(req)
-    system, full_prompt = _build_prompt(req, context)
+    rag_chunks, web_snippets, sources = await _build_context(req)
+    system, full_prompt = _build_prompt(req, rag_chunks, web_snippets)
 
-    async with httpx.AsyncClient(timeout=120) as client:
+    async with httpx.AsyncClient(timeout=httpx.Timeout(connect=10.0, read=120.0, write=10.0, pool=5.0)) as client:
         llm_resp = await client.post(
             f"{LLM_URL}/completion",
             json={"prompt": f"<|system|>{system}<|user|>{full_prompt}<|assistant|>", "n_predict": 512, "stop": LLM_STOP},
@@ -152,8 +223,8 @@ async def ask(req: AskRequest):
 @app.post("/ask/stream")
 async def ask_stream(req: AskRequest):
     t0 = time.monotonic()
-    context, sources = await _build_context(req)
-    system, full_prompt = _build_prompt(req, context)
+    rag_chunks, web_snippets, sources = await _build_context(req)
+    system, full_prompt = _build_prompt(req, rag_chunks, web_snippets)
 
     # ── Setup: create/get conversation and save user message ──
     now = datetime.now(timezone.utc)
@@ -187,7 +258,7 @@ async def ask_stream(req: AskRequest):
 
     async def generate():
         tokens = []
-        async with httpx.AsyncClient(timeout=120) as client:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(connect=10.0, read=120.0, write=10.0, pool=5.0)) as client:
             async with client.stream(
                 "POST", f"{LLM_URL}/completion",
                 json={"prompt": f"<|system|>{system}<|user|>{full_prompt}<|assistant|>", "n_predict": 512, "stream": True, "stop": LLM_STOP},
