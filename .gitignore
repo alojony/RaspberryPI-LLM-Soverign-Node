@@ -1,0 +1,15 @@
+.env
+data/qdrant/*
+!data/qdrant/.gitkeep
+data/db/*
+!data/db/.gitkeep
+data/models/*
+!data/models/.gitkeep
+data/vault/
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+*.egg-info/
+.DS_Store

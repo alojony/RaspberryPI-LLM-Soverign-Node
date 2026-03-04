@@ -1,0 +1,97 @@
+services:
+
+  # ── LLM Runtime (llama.cpp server) ──────────────────────────
+  llm:
+    image: ghcr.io/ggerganov/llama.cpp:server
+    container_name: pi-llm
+    restart: unless-stopped
+    volumes:
+      - ./data/models:/data/models:ro
+    environment:
+      - LLAMA_ARG_MODEL=${MODEL_PATH}
+      - LLAMA_ARG_CTX_SIZE=${LLM_CTX:-4096}
+      - LLAMA_ARG_N_THREADS=${LLM_THREADS:-4}
+      - LLAMA_ARG_HOST=0.0.0.0
+      - LLAMA_ARG_PORT=8080
+    ports:
+      - "8080:8080"
+    deploy:
+      resources:
+        limits:
+          cpus: "4.0"
+          memory: 6g
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # ── Embedding Service ────────────────────────────────────────
+  embeddings:
+    build: ./services/embeddings
+    container_name: pi-embeddings
+    restart: unless-stopped
+    environment:
+      - EMBED_MODEL=${EMBED_MODEL:-all-MiniLM-L6-v2}
+    ports:
+      - "8001:8001"
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 1g
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # ── Vector DB (Qdrant) ───────────────────────────────────────
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: pi-qdrant
+    restart: unless-stopped
+    volumes:
+      - ./data/qdrant:/qdrant/storage
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1g
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6333/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # ── FastAPI Application ──────────────────────────────────────
+  api:
+    build: ./services/api
+    container_name: pi-api
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - ./data/db:/data/db
+      - ./data/vault:/data/vault:ro
+    ports:
+      - "${API_PORT:-8000}:8000"
+    depends_on:
+      llm:
+        condition: service_healthy
+      embeddings:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 1g
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
