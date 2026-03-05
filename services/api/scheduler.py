@@ -2,8 +2,9 @@ import logging
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
 from apscheduler.jobstores.base import JobLookupError
+from apscheduler.triggers.cron import CronTrigger
 import os
-from database import SessionLocal, TimerDB, ReminderDB
+from database import SessionLocal, TimerDB, ReminderDB, BriefingDB
 
 logger = logging.getLogger(__name__)
 
@@ -88,3 +89,78 @@ def cancel_timer(timer_id: int):
         scheduler.remove_job(f"timer_{timer_id}")
     except JobLookupError:
         pass
+
+
+async def generate_briefing():
+    from datetime import date, datetime, timedelta, time
+    import httpx
+    import pytz
+
+    local_tz_name = os.getenv("TZ", "UTC")
+    weather_location = os.getenv("WEATHER_LOCATION", "Sacramento,CA")
+    local_tz = pytz.timezone(local_tz_name)
+    today = datetime.now(local_tz).date()
+    today_str = today.isoformat()
+
+    db = SessionLocal()
+    try:
+        existing = db.query(BriefingDB).filter(BriefingDB.date == today_str).first()
+        if existing:
+            return
+    finally:
+        db.close()
+
+    weather_line = ""
+    try:
+        url = f"https://wttr.in/{weather_location.replace(' ', '+')}?format=j1"
+        async with httpx.AsyncClient(timeout=httpx.Timeout(connect=5.0, read=10.0, write=5.0, pool=5.0)) as client:
+            resp = await client.get(url, headers={"User-Agent": "pi-node/1.0"})
+            resp.raise_for_status()
+            data = resp.json()
+        c = data["current_condition"][0]
+        weather_line = f"**Weather:** {c['weatherDesc'][0]['value']}, {c['temp_C']}°C / {c['temp_F']}°F"
+    except Exception as e:
+        logger.warning(f"[BRIEFING] weather fetch failed: {e}")
+
+    db = SessionLocal()
+    try:
+        today_dt = datetime.combine(today, time.min)
+        tomorrow_dt = datetime.combine(today + timedelta(days=1), time.min)
+        reminders = db.query(ReminderDB).filter(
+            ReminderDB.completed == False,
+            ReminderDB.trigger_at >= today_dt,
+            ReminderDB.trigger_at < tomorrow_dt,
+        ).order_by(ReminderDB.trigger_at).all()
+        remind_lines = [f"- {r.trigger_at.strftime('%-I:%M %p')}: {r.text}" for r in reminders]
+    finally:
+        db.close()
+
+    lines = [f"## Morning Briefing — {today.strftime('%A, %B %-d %Y')}"]
+    if weather_line:
+        lines.append(weather_line)
+    lines.append("")
+    if remind_lines:
+        lines.append("**Today's reminders:**")
+        lines.extend(remind_lines)
+    else:
+        lines.append("**Reminders:** None for today.")
+    lines.append("")
+    lines.append("**Calendar:** Notion & Google Calendar integration coming soon.")
+    content = "\n".join(lines)
+
+    db = SessionLocal()
+    try:
+        db.add(BriefingDB(date=today_str, content=content, created_at=datetime.utcnow()))
+        db.commit()
+        logger.info(f"[BRIEFING] Generated briefing for {today_str}")
+    finally:
+        db.close()
+
+
+scheduler.add_job(
+    generate_briefing,
+    trigger=CronTrigger(hour=8, minute=0),
+    id="daily_briefing",
+    replace_existing=True,
+    misfire_grace_time=3600,
+)

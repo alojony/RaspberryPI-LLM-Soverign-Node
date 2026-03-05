@@ -1,6 +1,6 @@
 import os
 from datetime import datetime
-from sqlalchemy import create_engine, Column, Integer, String, Boolean, DateTime, Float
+from sqlalchemy import create_engine, Column, Integer, String, Boolean, DateTime, Float, Text
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
 
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:////data/db/pi_node.db")
@@ -60,6 +60,14 @@ class MessageDB(Base):
     sources = Column(String, nullable=True)   # JSON-encoded list
     latency_ms = Column(Float, nullable=True)
     created_at = Column(DateTime, nullable=False)
+
+
+class BriefingDB(Base):
+    __tablename__ = "briefings"
+    id         = Column(Integer, primary_key=True, autoincrement=True)
+    date       = Column(String, unique=True, nullable=False)
+    content    = Column(Text, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
 
 
 def init_db():

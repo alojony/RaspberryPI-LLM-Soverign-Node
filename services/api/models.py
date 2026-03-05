@@ -98,3 +98,11 @@ class ConversationDetail(BaseModel):
     messages: list[MessageOut]
 
     model_config = {"from_attributes": True}
+
+
+class Briefing(BaseModel):
+    id: int
+    date: str
+    content: str
+    created_at: datetime
+    model_config = {"from_attributes": True}

@@ -81,11 +81,11 @@ services:
       - "${API_PORT:-8000}:8000"
     depends_on:
       llm:
-        condition: service_healthy
+        condition: service_started
       embeddings:
-        condition: service_healthy
+        condition: service_started
       qdrant:
-        condition: service_healthy
+        condition: service_started
     deploy:
       resources:
         limits:

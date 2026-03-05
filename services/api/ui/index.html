@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Pi Sovereign Node</title>
   <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   <style>
     :root {
       --gb-dark:   #282828;
@@ -127,7 +128,19 @@
     .msg.bot  { align-self: flex-start; align-items: flex-start; }
     .bubble { padding: 12px 16px; border-radius: 6px; font-size: 13px; line-height: 1.7; white-space: pre-wrap; word-break: break-word; }
     .msg.user .bubble { background: var(--gb-dark2); color: var(--gb-light); border: 1px solid var(--gb-accent); }
-    .msg.bot  .bubble { background: var(--gb-accent); color: var(--gb-light); border: 1px solid var(--gb-dark2); }
+    .msg.bot  .bubble { background: var(--gb-accent); color: var(--gb-light); border: 1px solid var(--gb-dark2); white-space: normal; }
+    .msg.bot .bubble p  { margin: 0 0 0.6em; }
+    .msg.bot .bubble p:last-child { margin-bottom: 0; }
+    .msg.bot .bubble ul, .msg.bot .bubble ol { margin: 0.4em 0 0.6em 1.4em; }
+    .msg.bot .bubble li { margin-bottom: 0.2em; }
+    .msg.bot .bubble code { background: var(--gb-dark); color: var(--gb-green); padding: 1px 5px; border-radius: 3px; font-size: 12px; }
+    .msg.bot .bubble pre { background: var(--gb-dark); border: 1px solid var(--gb-dark2); border-radius: 4px; padding: 10px 12px; overflow-x: auto; margin: 0.6em 0; }
+    .msg.bot .bubble pre code { background: none; padding: 0; color: var(--gb-light); font-size: 12px; }
+    .msg.bot .bubble h1,.msg.bot .bubble h2,.msg.bot .bubble h3 { color: var(--gb-orange); margin: 0.6em 0 0.3em; font-size: 13px; }
+    .msg.bot .bubble strong { color: var(--gb-orange); }
+    .msg.bot .bubble em { color: var(--gb-purple); }
+    .msg.bot .bubble a { color: var(--gb-blue); }
+    .msg.bot .bubble blockquote { border-left: 2px solid var(--gb-gray); margin: 0.4em 0; padding-left: 10px; color: var(--gb-gray); }
     .meta { margin-top: 6px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
     .latency { font-size: 10px; color: var(--gb-gray); }
     .source { font-size: 10px; color: var(--gb-purple); background: var(--gb-dark2); border: 1px solid var(--gb-purple); border-radius: 3px; padding: 2px 6px; text-decoration: none; max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: inline-block; }
@@ -245,6 +258,13 @@
       display: inline-block;
       margin: 2px 3px;
     }
+
+    /* ── Briefing banner ── */
+    #briefing-body h2 { color: var(--gb-orange); font-size: 11px; font-weight: 700; margin: 0 0 4px; }
+    #briefing-body strong { color: var(--gb-orange); }
+    #briefing-body ul, #briefing-body ol { margin: 2px 0 4px 14px; }
+    #briefing-body li { margin-bottom: 2px; }
+    #briefing-body p { margin: 0 0 4px; }
 
     /* ── Reminders (modal body reuse) ── */
     .remind-form {
@@ -478,16 +498,24 @@
 
   <aside id="right-drawer">
 
+    <div id="briefing-banner" style="display:none; flex-shrink:0; border-bottom: 1px solid var(--gb-dark2);">
+      <div class="drawer-header" style="cursor:pointer;" id="briefing-header">
+        <span class="drawer-title" style="color:var(--gb-orange);">briefing</span>
+        <span id="briefing-toggle" style="font-size:10px; color:var(--gb-gray);">&#9662;</span>
+      </div>
+      <div id="briefing-body" class="drawer-body" style="font-size:11px; line-height:1.7; color:var(--gb-light); max-height:180px;"></div>
+    </div>
+
     <div class="drawer-section">
       <div class="drawer-header">
         <span class="drawer-title cal">calendar</span>
         <button class="btn-expand" id="btn-expand-cal">&#8599;</button>
       </div>
       <div class="drawer-body" id="cal-drawer-body">
-        <div class="cal-mini-placeholder">
-          <div>No events yet.</div>
+        <div id="weather-mini" class="cal-mini-placeholder">loading&#8230;</div>
+        <div class="cal-mini-placeholder" style="margin-top:4px;">
           <div><span class="cal-mini-badge">Notion</span><span class="cal-mini-badge">Google</span></div>
-          <div>coming soon</div>
+          <div style="font-size:10px;">calendar coming soon</div>
         </div>
       </div>
     </div>
@@ -698,7 +726,11 @@
     wrap.className = `msg ${role}`;
     const bubble = document.createElement('div');
     bubble.className = 'bubble';
-    bubble.textContent = text;
+    if (role === 'bot') {
+      bubble.innerHTML = marked.parse(text);
+    } else {
+      bubble.textContent = text;
+    }
     wrap.appendChild(bubble);
 
     if (meta.latency != null || (meta.sources && meta.sources.length)) {
@@ -790,11 +822,14 @@
           const ev = JSON.parse(line.slice(6));
 
           if (ev.type === 'token') {
-            bubble.textContent += ev.token;
+            bubble.dataset.raw = (bubble.dataset.raw || '') + ev.token;
+            bubble.textContent = bubble.dataset.raw;
             chat.scrollTop = chat.scrollHeight;
           } else if (ev.type === 'sources') {
             sources = ev.sources || [];
           } else if (ev.type === 'done') {
+            // Render accumulated raw text as markdown
+            if (bubble.dataset.raw) bubble.innerHTML = marked.parse(bubble.dataset.raw);
             if (ev.conversation_id && ev.conversation_id !== currentConvId) {
               currentConvId = ev.conversation_id;
               loadConversations();
@@ -985,9 +1020,44 @@
     btn.textContent = hidden ? 'hide completed' : 'show completed';
   });
 
+  // ── Weather widget ──
+  async function loadWeather() {
+    const el = document.getElementById('weather-mini');
+    if (!el) return;
+    try {
+      const res = await fetch('/weather');
+      if (!res.ok) { el.textContent = 'weather unavailable'; return; }
+      const d = await res.json();
+      el.innerHTML = `<strong style="color:var(--gb-orange)">${d.condition}</strong><br>${d.temp_c}°C / ${d.temp_f}°F · ${d.humidity}% humidity`;
+    } catch { el.textContent = 'weather unavailable'; }
+  }
+
+  // ── Briefing banner ──
+  async function loadBriefing() {
+    try {
+      const res = await fetch('/briefing/today');
+      if (!res.ok) return;
+      const data = await res.json();
+      if (!data.briefing) return;
+      const banner = document.getElementById('briefing-banner');
+      const body   = document.getElementById('briefing-body');
+      body.innerHTML = marked.parse(data.briefing.content);
+      banner.style.display = 'flex';
+      banner.style.flexDirection = 'column';
+
+      document.getElementById('briefing-header').addEventListener('click', () => {
+        const isHidden = body.style.display === 'none';
+        body.style.display = isHidden ? '' : 'none';
+        document.getElementById('briefing-toggle').textContent = isHidden ? '\u25be' : '\u25b8';
+      });
+    } catch (e) { /* silently ignore */ }
+  }
+
   // ── Init ──
   loadReminders();
   loadConversations();
+  loadWeather();
+  loadBriefing();
   input.focus();
 </script>
 </body>

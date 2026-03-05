@@ -17,8 +17,8 @@ from sqlalchemy.orm import Session
 from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, VectorParams, PointStruct
 
-from database import init_db, get_db, ReminderDB, DocumentDB, TimerDB, ConversationDB, MessageDB, SessionLocal
-from models import AskRequest, AskResponse, RemindRequest, Reminder, TimerRequest, Timer, TimeResponse, IngestRequest, IngestResponse, ConversationSummary, MessageOut, ConversationDetail
+from database import init_db, get_db, ReminderDB, DocumentDB, TimerDB, ConversationDB, MessageDB, SessionLocal, BriefingDB
+from models import AskRequest, AskResponse, RemindRequest, Reminder, TimerRequest, Timer, TimeResponse, IngestRequest, IngestResponse, ConversationSummary, MessageOut, ConversationDetail, Briefing
 from scheduler import scheduler, schedule_reminder, schedule_timer, cancel_timer
 from intent import _looks_like_intent, extract_intent, execute_intent
 from chunker import chunk_text
@@ -35,6 +35,7 @@ QDRANT_PORT = int(os.getenv("QDRANT_PORT", "6333"))
 COLLECTION = os.getenv("QDRANT_COLLECTION", "pi_node")
 VAULT_PATH = os.getenv("VAULT_PATH", "/data/vault")
 LOCAL_TZ = os.getenv("TZ", "UTC")
+WEATHER_LOCATION = os.getenv("WEATHER_LOCATION", "Sacramento,CA")
 CHUNK_SIZE = int(os.getenv("CHUNK_SIZE", "1600"))
 CHUNK_OVERLAP = int(os.getenv("CHUNK_OVERLAP", "400"))
 EMBED_DIM = int(os.getenv("EMBED_DIM", "384"))
@@ -75,8 +76,17 @@ qdrant: QdrantClient = None
 async def lifespan(app: FastAPI):
     global qdrant
     init_db()
-    qdrant = QdrantClient(host=QDRANT_HOST, port=QDRANT_PORT)
-    existing = [c.name for c in qdrant.get_collections().collections]
+    # Retry loop — qdrant may still be starting when api container boots
+    for attempt in range(10):
+        try:
+            qdrant = QdrantClient(host=QDRANT_HOST, port=QDRANT_PORT)
+            existing = [c.name for c in qdrant.get_collections().collections]
+            break
+        except Exception as e:
+            if attempt == 9:
+                raise
+            logger.warning(f"Qdrant not ready (attempt {attempt+1}/10): {e} — retrying in 3s")
+            await asyncio.sleep(3)
     if COLLECTION not in existing:
         qdrant.create_collection(
             collection_name=COLLECTION,
@@ -184,7 +194,7 @@ def _truncate_to_budget(rag_chunks: list[str], web_snippets: list[str], system_p
     parts = selected_rag + selected_web
     return "\n---\n".join(parts) if parts else ""
 
-def _build_prompt(req: AskRequest, rag_chunks: list[str], web_snippets: list[str]) -> tuple[str, str]:
+def _build_prompt(req: AskRequest, rag_chunks: list[str], web_snippets: list[str], weather_brief: str = "") -> tuple[str, str]:
     if req.use_web:
         system = SYSTEM_PROMPT_WEB
     elif rag_chunks or web_snippets:
@@ -200,12 +210,34 @@ def _build_prompt(req: AskRequest, rag_chunks: list[str], web_snippets: list[str
         date_line = f"Current date: {datetime.now().strftime('%Y-%m-%d')}."
 
     system = f"{system}\n\n{date_line}"
+    if weather_brief:
+        system = f"{system}\n{weather_brief}"
 
     context = _truncate_to_budget(rag_chunks, web_snippets, system, req.prompt)
     full_prompt = f"[CONTEXT]\n{context}\n\n[QUESTION]\n{req.prompt}" if context else req.prompt
     return system, full_prompt
 
 LLM_STOP = ["<|user|>", "<|im_end|>", "<|im_start|>"]
+
+_weather_cache: dict = {"ts": 0.0, "brief": ""}
+
+async def _get_weather_brief() -> str:
+    if time.monotonic() - _weather_cache["ts"] < 1800:
+        return _weather_cache["brief"]
+    try:
+        url = f"https://wttr.in/{WEATHER_LOCATION.replace(' ', '+')}?format=j1"
+        async with httpx.AsyncClient(timeout=httpx.Timeout(connect=10.0, read=30.0, write=10.0, pool=5.0)) as client:
+            resp = await client.get(url, headers={"User-Agent": "pi-node/1.0"})
+            resp.raise_for_status()
+            data = resp.json()
+        c = data["current_condition"][0]
+        brief = (f"Weather in {WEATHER_LOCATION}: {c['weatherDesc'][0]['value']}, "
+                 f"{c['temp_C']}°C / {c['temp_F']}°F, {c['humidity']}% humidity.")
+        _weather_cache["ts"] = time.monotonic()
+        _weather_cache["brief"] = brief
+        return brief
+    except Exception:
+        return ""
 
 
 # ── Ask (JSON, for API clients) ───────────────────────────────
@@ -245,8 +277,9 @@ async def ask_stream(req: AskRequest):
             logger.info(f"[INTENT] result: confirmation={action_confirmation!r} error={action_error!r}")
 
     if action_confirmation is None and action_error is None:
+        weather_brief = await _get_weather_brief()
         rag_chunks, web_snippets, sources = await _build_context(req)
-        system, full_prompt = _build_prompt(req, rag_chunks, web_snippets)
+        system, full_prompt = _build_prompt(req, rag_chunks, web_snippets, weather_brief=weather_brief)
     else:
         rag_chunks, web_snippets, sources = [], [], []
         system, full_prompt = "", ""
@@ -424,6 +457,45 @@ def get_time():
         valencia=now_utc.astimezone(valencia_tz).isoformat(),
         montreal=now_utc.astimezone(montreal_tz).isoformat(),
     )
+
+
+# ── Weather ──────────────────────────────────────────────────
+
+@app.get("/weather")
+async def get_weather():
+    url = f"https://wttr.in/{WEATHER_LOCATION.replace(' ', '+')}?format=j1"
+    try:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(connect=10.0, read=30.0, write=10.0, pool=5.0)) as client:
+            resp = await client.get(url, headers={"User-Agent": "pi-node/1.0"})
+            resp.raise_for_status()
+            data = resp.json()
+        current = data["current_condition"][0]
+        return {
+            "location": WEATHER_LOCATION,
+            "condition": current["weatherDesc"][0]["value"],
+            "temp_c": int(current["temp_C"]),
+            "temp_f": int(current["temp_F"]),
+            "feels_like_c": int(current["FeelsLikeC"]),
+            "feels_like_f": int(current["FeelsLikeF"]),
+            "humidity": int(current["humidity"]),
+            "wind_kmph": int(current["windspeedKmph"]),
+        }
+    except Exception as e:
+        logger.warning(f"[WEATHER] fetch failed: {e}")
+        raise HTTPException(status_code=503, detail="Weather service unavailable")
+
+
+# ── Briefing ──────────────────────────────────────────────────
+
+@app.get("/briefing/today")
+async def get_briefing_today(db: Session = Depends(get_db)):
+    import pytz
+    local_tz = pytz.timezone(LOCAL_TZ)
+    today_str = datetime.now(local_tz).date().isoformat()
+    briefing = db.query(BriefingDB).filter(BriefingDB.date == today_str).first()
+    if not briefing:
+        return {"briefing": None}
+    return {"briefing": {"date": briefing.date, "content": briefing.content}}
 
 
 # ── Timers ────────────────────────────────────────────────────
