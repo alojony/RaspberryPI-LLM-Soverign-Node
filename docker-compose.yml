@@ -76,6 +76,7 @@ services:
     volumes:
       - ./data/db:/data/db
       - ${VAULT_HOST_PATH:-./data/vault}:/data/vault:ro
+      - ./services/api/ui:/app/ui:ro
     ports:
       - "${API_PORT:-8000}:8000"
     depends_on:

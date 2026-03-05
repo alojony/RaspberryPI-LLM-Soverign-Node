@@ -9,3 +9,4 @@ pydantic==2.9.2
 pytz==2024.2
 duckduckgo-search==6.3.7
 trafilatura==1.12.2
+dateparser==1.2.0

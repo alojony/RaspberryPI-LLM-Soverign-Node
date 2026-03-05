@@ -20,6 +20,7 @@ from qdrant_client.models import Distance, VectorParams, PointStruct
 from database import init_db, get_db, ReminderDB, DocumentDB, TimerDB, ConversationDB, MessageDB, SessionLocal
 from models import AskRequest, AskResponse, RemindRequest, Reminder, TimerRequest, Timer, TimeResponse, IngestRequest, IngestResponse, ConversationSummary, MessageOut, ConversationDetail
 from scheduler import scheduler, schedule_reminder, schedule_timer, cancel_timer
+from intent import _looks_like_intent, extract_intent, execute_intent
 from chunker import chunk_text
 import trafilatura
 from duckduckgo_search import DDGS
@@ -223,8 +224,23 @@ async def ask(req: AskRequest):
 @app.post("/ask/stream")
 async def ask_stream(req: AskRequest):
     t0 = time.monotonic()
-    rag_chunks, web_snippets, sources = await _build_context(req)
-    system, full_prompt = _build_prompt(req, rag_chunks, web_snippets)
+
+    # Intent detection — runs before RAG to save embedding round-trip
+    action_confirmation = None
+    action_error = None
+    if _looks_like_intent(req.prompt):
+        logger.info(f"[INTENT] gate fired for: {req.prompt[:60]}")
+        extracted = await extract_intent(req.prompt, LLM_URL, LOCAL_TZ)
+        if extracted and extracted.get("intent") in ("create_reminder", "set_timer"):
+            action_confirmation, action_error = await execute_intent(extracted, LOCAL_TZ)
+            logger.info(f"[INTENT] result: confirmation={action_confirmation!r} error={action_error!r}")
+
+    if action_confirmation is None and action_error is None:
+        rag_chunks, web_snippets, sources = await _build_context(req)
+        system, full_prompt = _build_prompt(req, rag_chunks, web_snippets)
+    else:
+        rag_chunks, web_snippets, sources = [], [], []
+        system, full_prompt = "", ""
 
     # ── Setup: create/get conversation and save user message ──
     now = datetime.now(timezone.utc)
@@ -258,19 +274,27 @@ async def ask_stream(req: AskRequest):
 
     async def generate():
         tokens = []
-        async with httpx.AsyncClient(timeout=httpx.Timeout(connect=10.0, read=120.0, write=10.0, pool=5.0)) as client:
-            async with client.stream(
-                "POST", f"{LLM_URL}/completion",
-                json={"prompt": f"<|system|>{system}<|user|>{full_prompt}<|assistant|>", "n_predict": 512, "stream": True, "stop": LLM_STOP},
-            ) as resp:
-                async for line in resp.aiter_lines():
-                    if line.startswith("data: "):
-                        data = json.loads(line[6:])
-                        token = data.get("content", "")
-                        tokens.append(token)
-                        yield f"data: {json.dumps({'type': 'token', 'token': token, 'stop': data.get('stop', False)})}\n\n"
-                        if data.get("stop"):
-                            break
+
+        if action_confirmation is not None or action_error is not None:
+            message = action_confirmation or action_error
+            for char in message:
+                tokens.append(char)
+                yield f"data: {json.dumps({'type': 'token', 'token': char, 'stop': False})}\n\n"
+            yield f"data: {json.dumps({'type': 'token', 'token': '', 'stop': True})}\n\n"
+        else:
+            async with httpx.AsyncClient(timeout=httpx.Timeout(connect=10.0, read=120.0, write=10.0, pool=5.0)) as client:
+                async with client.stream(
+                    "POST", f"{LLM_URL}/completion",
+                    json={"prompt": f"<|system|>{system}<|user|>{full_prompt}<|assistant|>", "n_predict": 512, "stream": True, "stop": LLM_STOP},
+                ) as resp:
+                    async for line in resp.aiter_lines():
+                        if line.startswith("data: "):
+                            data = json.loads(line[6:])
+                            token = data.get("content", "")
+                            tokens.append(token)
+                            yield f"data: {json.dumps({'type': 'token', 'token': token, 'stop': data.get('stop', False)})}\n\n"
+                            if data.get("stop"):
+                                break
 
         # ── Save assistant message ──
         full_answer = "".join(tokens).strip()
