@@ -192,6 +192,15 @@ def _build_prompt(req: AskRequest, rag_chunks: list[str], web_snippets: list[str
     else:
         system = SYSTEM_PROMPT_PLAIN
 
+    try:
+        import pytz
+        local_dt = datetime.now(pytz.timezone(LOCAL_TZ))
+        date_line = f"Current date and time: {local_dt.strftime('%A, %B %-d %Y, %-I:%M %p %Z')}."
+    except Exception:
+        date_line = f"Current date: {datetime.now().strftime('%Y-%m-%d')}."
+
+    system = f"{system}\n\n{date_line}"
+
     context = _truncate_to_budget(rag_chunks, web_snippets, system, req.prompt)
     full_prompt = f"[CONTEXT]\n{context}\n\n[QUESTION]\n{req.prompt}" if context else req.prompt
     return system, full_prompt
