@@ -76,11 +76,17 @@ def _parse_extraction(raw: str) -> dict | None:
     return data
 
 
+_TODAY_WORDS = re.compile(
+    r'\b(tonight|this evening|this afternoon|this morning|this noon)\b', re.IGNORECASE
+)
+
 def _resolve_datetime(datetime_str: str, local_tz: str) -> datetime | None:
     if not datetime_str:
         return None
+    # Normalize ambiguous same-day words that dateparser pushes to tomorrow
+    normalized = _TODAY_WORDS.sub("today", datetime_str)
     dt = dateparser.parse(
-        datetime_str,
+        normalized,
         settings={"PREFER_DATES_FROM": "future", "RETURN_AS_TIMEZONE_AWARE": True, "TIMEZONE": local_tz},
     )
     if dt is None:
