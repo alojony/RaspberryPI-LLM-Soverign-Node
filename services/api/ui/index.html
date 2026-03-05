@@ -49,6 +49,20 @@
     .toggle.active-web { border-color: var(--gb-blue); color: var(--gb-blue); }
     .toggle:hover { opacity: 0.85; }
 
+    /* ── Collapse toggle button ── */
+    .btn-collapse-drawer {
+      font-family: var(--font-mono);
+      font-size: 13px;
+      background: none;
+      border: 1px solid var(--gb-gray);
+      color: var(--gb-gray);
+      border-radius: 3px;
+      padding: 3px 9px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .btn-collapse-drawer:hover { border-color: var(--gb-light); color: var(--gb-light); }
+
     /* ── Layout ── */
     .layout { display: flex; flex: 1; overflow: hidden; }
 
@@ -138,44 +152,101 @@
     #send:hover { opacity: 0.85; }
     #send:disabled { opacity: 0.4; cursor: not-allowed; }
 
-    /* ── Tab bar ── */
-    .tab-bar {
-      background: var(--gb-dark2);
-      border-bottom: 1px solid var(--gb-accent);
-      display: flex;
-      gap: 0;
+    /* ── Right drawer ── */
+    #right-drawer {
+      width: 260px;
       flex-shrink: 0;
-      padding: 0 16px;
-    }
-    .tab {
-      font-family: var(--font-mono);
-      font-size: 11px;
-      font-weight: 700;
-      letter-spacing: 0.08em;
-      padding: 8px 16px;
-      border: none;
-      border-bottom: 2px solid transparent;
-      background: transparent;
-      color: var(--gb-gray);
-      cursor: pointer;
-      transition: color 0.15s, border-color 0.15s;
-      text-transform: uppercase;
-    }
-    .tab:hover { color: var(--gb-light); }
-    .tab.active-chat      { color: var(--gb-orange); border-bottom-color: var(--gb-orange); }
-    .tab.active-reminders { color: var(--gb-green);  border-bottom-color: var(--gb-green); }
-    .tab.active-calendar  { color: var(--gb-blue);   border-bottom-color: var(--gb-blue); }
-
-    /* ── Reminders view ── */
-    #view-reminders {
-      display: none;
-      flex: 1;
+      background: var(--gb-accent);
+      border-left: 1px solid var(--gb-dark2);
+      display: flex;
       flex-direction: column;
       overflow: hidden;
-      padding: 24px 28px;
-      gap: 24px;
-      overflow-y: auto;
+      transition: width 0.2s ease;
     }
+    #right-drawer.collapsed { width: 0; border: none; }
+
+    /* ── Drawer sections ── */
+    .drawer-section {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      min-height: 0;
+      border-bottom: 1px solid var(--gb-dark2);
+    }
+    .drawer-section:last-child { border-bottom: none; }
+    .drawer-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 12px;
+      background: var(--gb-dark2);
+      flex-shrink: 0;
+    }
+    .drawer-title {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+    }
+    .drawer-title.cal  { color: var(--gb-blue); }
+    .drawer-title.rem  { color: var(--gb-green); }
+    .btn-expand {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      background: none;
+      border: 1px solid var(--gb-gray);
+      color: var(--gb-gray);
+      border-radius: 3px;
+      padding: 2px 7px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .btn-expand:hover { border-color: var(--gb-light); color: var(--gb-light); }
+    .drawer-body {
+      flex: 1;
+      overflow-y: auto;
+      padding: 8px 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .drawer-body::-webkit-scrollbar { width: 3px; }
+    .drawer-body::-webkit-scrollbar-thumb { background: var(--gb-dark2); }
+
+    /* ── Compact reminder item in drawer ── */
+    .dr-remind-item {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      padding: 6px 8px;
+      background: var(--gb-dark);
+      border-radius: 3px;
+      border-left: 2px solid var(--gb-green);
+    }
+    .dr-remind-text { font-size: 11px; color: var(--gb-light); line-height: 1.3; }
+    .dr-remind-meta { font-size: 10px; color: var(--gb-gray); }
+    .drawer-empty { font-size: 11px; color: var(--gb-gray); padding: 4px 0; text-align: center; }
+
+    /* ── Compact calendar placeholder in drawer ── */
+    .cal-mini-placeholder {
+      font-size: 11px;
+      color: var(--gb-gray);
+      text-align: center;
+      padding: 12px 6px;
+      line-height: 1.7;
+    }
+    .cal-mini-badge {
+      font-size: 10px;
+      border: 1px solid var(--gb-blue);
+      color: var(--gb-blue);
+      border-radius: 3px;
+      padding: 1px 5px;
+      display: inline-block;
+      margin: 2px 3px;
+    }
+
+    /* ── Reminders (modal body reuse) ── */
     .remind-form {
       background: var(--gb-accent);
       border: 1px solid var(--gb-dark2);
@@ -306,37 +377,71 @@
     }
     .show-completed-btn:hover { color: var(--gb-light); }
 
-    /* ── Calendar placeholder ── */
-    #view-calendar {
+    /* ── Modal overlay ── */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.6);
       display: none;
-      flex: 1;
       align-items: center;
       justify-content: center;
+      z-index: 100;
+    }
+    .modal-overlay.open { display: flex; }
+    .modal-box {
+      background: var(--gb-dark2);
+      border: 1px solid var(--gb-accent);
+      border-radius: 6px;
+      width: min(600px, 92vw);
+      max-height: 80vh;
+      display: flex;
       flex-direction: column;
-      gap: 16px;
+      overflow: hidden;
+    }
+    .modal-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 18px;
+      border-bottom: 1px solid var(--gb-accent);
+      flex-shrink: 0;
+    }
+    .modal-title { font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
+    .modal-title.cal { color: var(--gb-blue); }
+    .modal-title.rem { color: var(--gb-green); }
+    .btn-close-modal {
+      font-family: var(--font-mono);
+      font-size: 16px;
+      background: none;
+      border: none;
       color: var(--gb-gray);
+      cursor: pointer;
+      padding: 0 4px;
+      line-height: 1;
+    }
+    .btn-close-modal:hover { color: var(--gb-red); }
+    .modal-body {
+      flex: 1;
+      overflow-y: auto;
+      padding: 20px 22px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    /* ── Calendar modal body ── */
+    .cal-modal-placeholder {
       text-align: center;
+      color: var(--gb-gray);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 14px;
+      padding: 20px 0;
     }
-    .cal-placeholder-title {
-      font-size: 14px;
-      font-weight: 700;
-      color: var(--gb-blue);
-      letter-spacing: 0.05em;
-      text-transform: uppercase;
-    }
-    .cal-placeholder-body {
-      font-size: 12px;
-      line-height: 1.9;
-    }
-    .cal-badge {
-      font-size: 11px;
-      border: 1px solid var(--gb-blue);
-      color: var(--gb-blue);
-      border-radius: 3px;
-      padding: 2px 8px;
-      display: inline-block;
-      margin: 2px 4px;
-    }
+    .cal-modal-title { font-size: 13px; font-weight: 700; color: var(--gb-blue); letter-spacing: 0.05em; text-transform: uppercase; }
+    .cal-modal-body { font-size: 12px; line-height: 1.9; }
+    .cal-badge { font-size: 11px; border: 1px solid var(--gb-blue); color: var(--gb-blue); border-radius: 3px; padding: 2px 8px; display: inline-block; margin: 2px 4px; }
   </style>
 </head>
 <body>
@@ -346,37 +451,89 @@
   <div class="toggles">
     <button class="toggle active-rag" id="btn-rag" title="Toggle RAG">RAG</button>
     <button class="toggle" id="btn-web" title="Toggle web search">WEB</button>
+    <button class="btn-collapse-drawer" id="btn-collapse-drawer" title="Toggle panel">&#9616;</button>
   </div>
 </header>
-
-<div class="tab-bar">
-  <button class="tab active-chat" id="tab-chat">chat</button>
-  <button class="tab"             id="tab-reminders">reminders</button>
-  <button class="tab"             id="tab-calendar">calendar</button>
-</div>
 
 <div class="layout">
   <nav id="sidebar">
     <button id="new-chat">+ new chat</button>
     <div id="conv-list"></div>
   </nav>
+
   <div class="main">
-    <div id="view-chat" style="display:flex; flex:1; flex-direction:column; overflow:hidden;">
-      <div id="chat">
-        <div class="empty" id="empty">
-          <div class="prompt">></div>
-          <p>Ask anything from your vault.<br>
-          Toggle <code>RAG</code> to search your notes.<br>
-          Toggle <code>WEB</code> to search the web.</p>
+    <div id="chat">
+      <div class="empty" id="empty">
+        <div class="prompt">></div>
+        <p>Ask anything from your vault.<br>
+        Toggle <code>RAG</code> to search your notes.<br>
+        Toggle <code>WEB</code> to search the web.</p>
+      </div>
+    </div>
+    <footer>
+      <textarea id="input" rows="1" placeholder="ask something..."></textarea>
+      <button id="send">send</button>
+    </footer>
+  </div>
+
+  <aside id="right-drawer">
+
+    <div class="drawer-section">
+      <div class="drawer-header">
+        <span class="drawer-title cal">calendar</span>
+        <button class="btn-expand" id="btn-expand-cal">&#8599;</button>
+      </div>
+      <div class="drawer-body" id="cal-drawer-body">
+        <div class="cal-mini-placeholder">
+          <div>No events yet.</div>
+          <div><span class="cal-mini-badge">Notion</span><span class="cal-mini-badge">Google</span></div>
+          <div>coming soon</div>
         </div>
       </div>
-      <footer>
-        <textarea id="input" rows="1" placeholder="ask something..."></textarea>
-        <button id="send">send</button>
-      </footer>
     </div>
 
-    <div id="view-reminders">
+    <div class="drawer-section">
+      <div class="drawer-header">
+        <span class="drawer-title rem">reminders <span id="drawer-remind-count" style="font-size:9px;color:var(--gb-green);margin-left:4px;"></span></span>
+        <button class="btn-expand" id="btn-expand-rem">&#8599;</button>
+      </div>
+      <div class="drawer-body" id="rem-drawer-body">
+      </div>
+    </div>
+
+  </aside>
+</div>
+
+<!-- Calendar modal -->
+<div class="modal-overlay" id="modal-cal">
+  <div class="modal-box">
+    <div class="modal-header">
+      <span class="modal-title cal">calendar</span>
+      <button class="btn-close-modal" id="close-modal-cal">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div class="cal-modal-placeholder">
+        <div class="cal-modal-title">calendar</div>
+        <div class="cal-modal-body">
+          Integrations coming soon.<br><br>
+          <span class="cal-badge">Notion Calendar</span>
+          <span class="cal-badge">Google Calendar</span><br><br>
+          Events from your connected calendars<br>will appear here in a week view.
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Reminders modal -->
+<div class="modal-overlay" id="modal-rem">
+  <div class="modal-box">
+    <div class="modal-header">
+      <span class="modal-title rem">reminders</span>
+      <button class="btn-close-modal" id="close-modal-rem">&times;</button>
+    </div>
+    <div class="modal-body" id="modal-rem-body">
+
       <div class="remind-form">
         <div class="remind-form-title">+ new reminder</div>
         <div class="remind-row">
@@ -405,17 +562,7 @@
           <div class="remind-list" id="remind-completed-list"></div>
         </div>
       </div>
-    </div>
 
-    <div id="view-calendar">
-      <div class="cal-placeholder-title">calendar</div>
-      <div class="cal-placeholder-body">
-        Integrations coming soon.<br><br>
-        <span class="cal-badge">Notion Calendar</span>
-        <span class="cal-badge">Google Calendar</span><br><br>
-        Events from your connected calendars<br>
-        will appear here in a week view.
-      </div>
     </div>
   </div>
 </div>
@@ -652,7 +799,6 @@
               currentConvId = ev.conversation_id;
               loadConversations();
             } else if (ev.conversation_id) {
-              // update updated_at ordering in sidebar
               loadConversations();
             }
             const lat = document.createElement('span');
@@ -667,6 +813,7 @@
               else { a.href = '#'; a.title = src; }
               meta.appendChild(a);
             });
+            loadReminders();
           }
         }
       }
@@ -683,52 +830,47 @@
     }
   }
 
-  // ── Tab switching ──
-  const tabChat       = document.getElementById('tab-chat');
-  const tabReminders  = document.getElementById('tab-reminders');
-  const tabCalendar   = document.getElementById('tab-calendar');
-  const viewChat      = document.getElementById('view-chat');
-  const viewReminders = document.getElementById('view-reminders');
-  const viewCalendar  = document.getElementById('view-calendar');
-  const sidebar       = document.getElementById('sidebar');
+  // ── Drawer collapse ──
+  const btnCollapseDrawer = document.getElementById('btn-collapse-drawer');
+  const rightDrawer = document.getElementById('right-drawer');
+  btnCollapseDrawer.addEventListener('click', () => {
+    rightDrawer.classList.toggle('collapsed');
+  });
 
-  function showTab(name) {
-    [tabChat, tabReminders, tabCalendar].forEach(t => t.className = 'tab');
-    viewChat.style.display      = 'none';
-    viewReminders.style.display = 'none';
-    viewCalendar.style.display  = 'none';
+  // ── Modal helpers ──
+  function openModal(id) { document.getElementById(id).classList.add('open'); }
+  function closeModal(id) { document.getElementById(id).classList.remove('open'); }
 
-    if (name === 'chat') {
-      tabChat.classList.add('active-chat');
-      viewChat.style.display = 'flex';
-      sidebar.style.display  = '';
-    } else if (name === 'reminders') {
-      tabReminders.classList.add('active-reminders');
-      viewReminders.style.display = 'flex';
-      sidebar.style.display = 'none';
-      loadReminders();
-    } else if (name === 'calendar') {
-      tabCalendar.classList.add('active-calendar');
-      viewCalendar.style.display = 'flex';
-      sidebar.style.display = 'none';
-    }
-  }
+  document.getElementById('btn-expand-cal').addEventListener('click', () => openModal('modal-cal'));
+  document.getElementById('close-modal-cal').addEventListener('click', () => closeModal('modal-cal'));
 
-  tabChat.addEventListener('click',      () => showTab('chat'));
-  tabReminders.addEventListener('click', () => showTab('reminders'));
-  tabCalendar.addEventListener('click',  () => showTab('calendar'));
+  document.getElementById('btn-expand-rem').addEventListener('click', () => {
+    openModal('modal-rem');
+    loadReminders();
+  });
+  document.getElementById('close-modal-rem').addEventListener('click', () => closeModal('modal-rem'));
 
-  // ── Reminders ──
+  document.querySelectorAll('.modal-overlay').forEach(overlay => {
+    overlay.addEventListener('click', e => { if (e.target === overlay) overlay.classList.remove('open'); });
+  });
+
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') document.querySelectorAll('.modal-overlay.open').forEach(m => m.classList.remove('open'));
+  });
+
+  // ── Reminders: drawer (compact) + modal (full) ──
   async function loadReminders() {
     const [pendingRes, doneRes] = await Promise.all([
       fetch('/reminders?done=false'),
       fetch('/reminders?done=true'),
     ]);
     const pending   = pendingRes.ok ? await pendingRes.json() : [];
-    const completed = doneRes.ok    ? await doneRes.json()    : [];
+    const completed = doneRes.ok   ? await doneRes.json()   : [];
+
+    renderDrawerReminders(pending);
 
     document.getElementById('remind-pending-count').textContent = pending.length;
-    renderReminderList('remind-pending-list',   pending,   false);
+    renderReminderList('remind-pending-list', pending, false);
     renderReminderList('remind-completed-list', completed, true);
   }
 
@@ -736,10 +878,39 @@
     const d = new Date(iso);
     const now = new Date();
     const diff = d - now;
-    if (diff > 0 && diff < 60000)    return 'in <1 min';
-    if (diff > 0 && diff < 3600000)  return `in ${Math.round(diff/60000)}m`;
-    if (diff > 0 && diff < 86400000) return `today ${d.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}`;
+    if (diff > 0 && diff < 60000)   return 'in <1 min';
+    if (diff > 0 && diff < 3600000) return `in ${Math.round(diff/60000)}m`;
+    if (diff > 0 && diff < 86400000) return `today ${d.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}`;
     return d.toLocaleString([], {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'});
+  }
+
+  function renderDrawerReminders(pending) {
+    const body = document.getElementById('rem-drawer-body');
+    const countEl = document.getElementById('drawer-remind-count');
+    body.innerHTML = '';
+    countEl.textContent = pending.length ? `(${pending.length})` : '';
+
+    if (!pending.length) {
+      const empty = document.createElement('div');
+      empty.className = 'drawer-empty';
+      empty.textContent = 'no pending reminders';
+      body.appendChild(empty);
+      return;
+    }
+
+    for (const r of pending) {
+      const item = document.createElement('div');
+      item.className = 'dr-remind-item';
+      const text = document.createElement('div');
+      text.className = 'dr-remind-text';
+      text.textContent = r.text;
+      const meta = document.createElement('div');
+      meta.className = 'dr-remind-meta';
+      meta.textContent = formatReminderTime(r.trigger_at) + (r.recurring ? ` · ${r.recurring}` : '');
+      item.appendChild(text);
+      item.appendChild(meta);
+      body.appendChild(item);
+    }
   }
 
   function renderReminderList(containerId, items, isDone) {
@@ -794,7 +965,6 @@
     const atRaw = document.getElementById('remind-at').value;
     const recur = document.getElementById('remind-recur').value || null;
     if (!text || !atRaw) return;
-
     const trigger_at = new Date(atRaw).toISOString();
     await fetch('/remind', {
       method: 'POST',
@@ -816,7 +986,7 @@
   });
 
   // ── Init ──
-  showTab('chat');
+  loadReminders();
   loadConversations();
   input.focus();
 </script>
