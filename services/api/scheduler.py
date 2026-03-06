@@ -145,7 +145,7 @@ async def generate_briefing():
     ]
     today_events.sort(key=lambda e: e["start"])
 
-    lines = [f"## Morning Briefing — {today.strftime('%A, %B %-d %Y')}"]
+    lines = [f"## {today.strftime('%A, %B %-d %Y')}"]
     if weather_line:
         lines.append(weather_line)
     lines.append("")
