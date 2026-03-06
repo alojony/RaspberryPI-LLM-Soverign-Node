@@ -10,9 +10,9 @@ import httpx
 from contextlib import asynccontextmanager
 from pathlib import Path
 from datetime import datetime, timezone, timedelta
-from fastapi import FastAPI, Depends, HTTPException
+from fastapi import FastAPI, Depends, HTTPException, Query
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, RedirectResponse
 from sqlalchemy.orm import Session
 from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, VectorParams, PointStruct
@@ -24,6 +24,8 @@ from intent import _looks_like_intent, extract_intent, execute_intent
 from chunker import chunk_text
 import trafilatura
 from duckduckgo_search import DDGS
+import notion_helper as notion
+import gcal_client as gcal
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -562,7 +564,58 @@ def delete_timer(timer_id: int, db: Session = Depends(get_db)):
 
 @app.get("/calendar")
 async def get_calendar():
-    return {"events": [], "sources": []}
+    notion_events = await asyncio.to_thread(notion.get_calendar_events)
+    gcal_events = await asyncio.to_thread(gcal.list_events)
+    events = sorted(notion_events + gcal_events, key=lambda e: e["start"])
+    sources = []
+    if notion_events:
+        sources.append("notion")
+    if gcal_events:
+        sources.append("google")
+    return {
+        "events": events,
+        "sources": sources,
+        "gcal_authorized": gcal.is_authorized(),
+        "gcal_credentials": gcal.credentials_exist(),
+        "notion_configured": notion.is_configured(),
+    }
+
+
+@app.get("/calendar/auth")
+async def gcal_auth():
+    if not gcal.credentials_exist():
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "credentials.json not found. Download it from GCP Console → APIs & Services → "
+                f"Credentials, then copy to {gcal.CREDENTIALS_PATH}"
+            ),
+        )
+    url = await asyncio.to_thread(gcal.get_auth_url)
+    return RedirectResponse(url)
+
+
+@app.get("/calendar/callback")
+async def gcal_callback(code: str = Query(...), state: str = Query(default="")):
+    if not gcal.credentials_exist():
+        raise HTTPException(status_code=503, detail="credentials.json not found")
+    await asyncio.to_thread(gcal.exchange_code, code, state)
+    return RedirectResponse("/ui")
+
+
+@app.post("/calendar/event")
+async def create_calendar_event(body: dict):
+    summary = body.get("summary", "")
+    start = body.get("start", "")
+    end = body.get("end", "")
+    description = body.get("description", "")
+    if not summary or not start or not end:
+        raise HTTPException(status_code=422, detail="summary, start, and end are required")
+    try:
+        event = await asyncio.to_thread(gcal.create_event, summary, start, end, description)
+        return event
+    except ValueError as e:
+        raise HTTPException(status_code=403, detail=str(e))
 
 
 # ── Ingestion ────────────────────────────────────────────────
@@ -646,3 +699,103 @@ async def ingest(req: IngestRequest, db: Session = Depends(get_db)):
         errors=errors,
         elapsed_ms=round((time.monotonic() - t0) * 1000, 1),
     )
+
+
+@app.post("/ingest/notion")
+async def ingest_notion(db: Session = Depends(get_db)):
+    if not notion.is_configured():
+        raise HTTPException(status_code=503, detail="NOTION_TOKEN not set")
+    t0 = time.monotonic()
+    client = notion.get_client()
+    database_ids = notion.NOTION_DATABASE_IDS
+    if not database_ids:
+        raise HTTPException(status_code=503, detail="NOTION_DATABASE_IDS not set")
+
+    pages_found = 0
+    pages_skipped = 0
+    pages_processed = 0
+    chunks_upserted = 0
+    errors: list[str] = []
+
+    for db_id in database_ids:
+        try:
+            pages = await asyncio.to_thread(notion.get_database_pages, client, db_id)
+        except Exception as e:
+            logger.error(f"[NOTION] failed to query database {db_id}: {e}")
+            errors.append(f"db:{db_id}")
+            continue
+
+        for page in pages:
+            pages_found += 1
+            page_id = page["id"]
+            title = notion.page_title(page)
+            # Use page last_edited_time as change signal
+            last_edited = page.get("last_edited_time", "")
+            doc_key = f"notion:{page_id}"
+            existing = db.query(DocumentDB).filter(DocumentDB.file_path == doc_key).first()
+            if existing and existing.file_hash == last_edited:
+                pages_skipped += 1
+                continue
+
+            try:
+                body_text = await asyncio.to_thread(notion.get_page_text, client, page_id)
+                full_text = f"# {title}\n\n{body_text}".strip()
+                if not full_text or full_text == f"# {title}":
+                    pages_skipped += 1
+                    continue
+
+                chunks = chunk_text(full_text, CHUNK_SIZE, CHUNK_OVERLAP)
+                async with httpx.AsyncClient(timeout=60) as hclient:
+                    embed_resp = await hclient.post(
+                        f"{EMBED_URL}/embed/batch",
+                        json={"texts": [c["text"] for c in chunks]},
+                    )
+                    embed_resp.raise_for_status()
+                    embeddings = embed_resp.json()["embeddings"]
+
+                points = []
+                for chunk, vec in zip(chunks, embeddings):
+                    point_id = str(uuid.uuid5(uuid.NAMESPACE_URL, f"{doc_key}:{chunk['char_start']}"))
+                    points.append(PointStruct(
+                        id=point_id,
+                        vector=vec,
+                        payload={
+                            "text": chunk["text"],
+                            "file_path": doc_key,
+                            "source_type": "notion",
+                            "char_start": chunk["char_start"],
+                            "char_end": chunk["char_end"],
+                            "title": title,
+                        },
+                    ))
+                qdrant.upsert(collection_name=COLLECTION, points=points)
+
+                now_utc = datetime.now(timezone.utc)
+                if existing:
+                    existing.file_hash = last_edited
+                    existing.last_indexed = now_utc
+                    existing.chunk_count = len(chunks)
+                else:
+                    db.add(DocumentDB(
+                        file_path=doc_key,
+                        file_hash=last_edited,
+                        last_indexed=now_utc,
+                        chunk_count=len(chunks),
+                    ))
+                db.commit()
+                pages_processed += 1
+                chunks_upserted += len(points)
+            except Exception as e:
+                logger.error(f"[NOTION] ingest failed for page {page_id} ({title}): {e}")
+                errors.append(f"page:{page_id}")
+
+    return {
+        "status": "ok" if not errors else "partial",
+        "databases": len(database_ids),
+        "pages_found": pages_found,
+        "pages_skipped": pages_skipped,
+        "pages_processed": pages_processed,
+        "chunks_upserted": chunks_upserted,
+        "errors": errors,
+        "elapsed_ms": round((time.monotonic() - t0) * 1000, 1),
+    }

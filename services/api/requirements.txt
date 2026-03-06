@@ -10,3 +10,7 @@ pytz==2024.2
 duckduckgo-search==6.3.7
 trafilatura==1.12.2
 dateparser==1.2.0
+notion-client==2.3.0
+google-api-python-client==2.155.0
+google-auth-oauthlib==1.2.1
+google-auth-httplib2==0.2.0

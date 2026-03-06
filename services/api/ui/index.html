@@ -513,10 +513,7 @@
       </div>
       <div class="drawer-body" id="cal-drawer-body">
         <div id="weather-mini" class="cal-mini-placeholder">loading&#8230;</div>
-        <div class="cal-mini-placeholder" style="margin-top:4px;">
-          <div><span class="cal-mini-badge">Notion</span><span class="cal-mini-badge">Google</span></div>
-          <div style="font-size:10px;">calendar coming soon</div>
-        </div>
+        <div id="cal-events-mini" style="margin-top:4px;"></div>
       </div>
     </div>
 
@@ -539,15 +536,11 @@
       <span class="modal-title cal">calendar</span>
       <button class="btn-close-modal" id="close-modal-cal">&times;</button>
     </div>
-    <div class="modal-body">
-      <div class="cal-modal-placeholder">
-        <div class="cal-modal-title">calendar</div>
-        <div class="cal-modal-body">
-          Integrations coming soon.<br><br>
-          <span class="cal-badge">Notion Calendar</span>
-          <span class="cal-badge">Google Calendar</span><br><br>
-          Events from your connected calendars<br>will appear here in a week view.
-        </div>
+    <div class="modal-body" id="cal-modal-body">
+      <div id="cal-modal-events"></div>
+      <div id="cal-modal-auth" style="display:none; margin-top:12px; font-size:12px; color:var(--gb-gray);">
+        <a id="cal-auth-link" href="/calendar/auth" style="color:var(--gb-blue);">Connect Google Calendar</a>
+        — visit the link, approve, and reload.
       </div>
     </div>
   </div>
@@ -1053,10 +1046,114 @@
     } catch (e) { /* silently ignore */ }
   }
 
+  // ── Calendar ──
+  function formatEventDate(iso) {
+    if (!iso) return '';
+    const d = new Date(iso.length === 10 ? iso + 'T00:00:00' : iso);
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const tomorrow = new Date(today); tomorrow.setDate(today.getDate() + 1);
+    const evDay = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    const dayLabel = evDay.getTime() === today.getTime() ? 'today'
+                   : evDay.getTime() === tomorrow.getTime() ? 'tomorrow'
+                   : d.toLocaleDateString([], {month:'short', day:'numeric'});
+    const hasTime = iso.length > 10;
+    return hasTime
+      ? `${dayLabel} ${d.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}`
+      : dayLabel;
+  }
+
+  function renderCalendarMini(events) {
+    const el = document.getElementById('cal-events-mini');
+    el.innerHTML = '';
+    const upcoming = events.slice(0, 4);
+    if (!upcoming.length) {
+      const empty = document.createElement('div');
+      empty.className = 'drawer-empty';
+      empty.textContent = 'no upcoming events';
+      el.appendChild(empty);
+      return;
+    }
+    for (const ev of upcoming) {
+      const item = document.createElement('div');
+      item.style.cssText = 'font-size:11px; padding:2px 0; border-bottom:1px solid var(--gb-dark2);';
+      const badge = ev.source === 'google' ? '🗓' : '📝';
+      item.innerHTML = `<span style="color:var(--gb-yellow)">${badge}</span> `
+        + `<span style="color:var(--gb-light)">${ev.summary}</span>`
+        + `<br><span style="color:var(--gb-gray); font-size:10px;">${formatEventDate(ev.start)}</span>`;
+      el.appendChild(item);
+    }
+  }
+
+  function renderCalendarModal(events, meta) {
+    const el = document.getElementById('cal-modal-events');
+    el.innerHTML = '';
+
+    if (!events.length) {
+      el.innerHTML = '<div style="color:var(--gb-gray); font-size:12px;">No upcoming events.</div>';
+    } else {
+      // Group by date
+      const groups = {};
+      for (const ev of events) {
+        const day = ev.start.slice(0, 10);
+        if (!groups[day]) groups[day] = [];
+        groups[day].push(ev);
+      }
+      for (const [day, dayEvents] of Object.entries(groups)) {
+        const header = document.createElement('div');
+        header.style.cssText = 'font-size:11px; font-weight:700; color:var(--gb-blue); margin:10px 0 4px; text-transform:uppercase; letter-spacing:0.05em;';
+        const d = new Date(day + 'T00:00:00');
+        header.textContent = d.toLocaleDateString([], {weekday:'short', month:'short', day:'numeric'});
+        el.appendChild(header);
+        for (const ev of dayEvents) {
+          const item = document.createElement('div');
+          item.style.cssText = 'font-size:12px; padding:4px 0; border-bottom:1px solid var(--gb-dark2); display:flex; gap:6px; align-items:flex-start;';
+          const src = document.createElement('span');
+          src.style.cssText = 'font-size:10px; border:1px solid; border-radius:3px; padding:1px 5px; flex-shrink:0; margin-top:1px;';
+          src.textContent = ev.source;
+          src.style.color = ev.source === 'google' ? 'var(--gb-blue)' : 'var(--gb-purple)';
+          src.style.borderColor = src.style.color;
+          const text = document.createElement('div');
+          text.innerHTML = `<span style="color:var(--gb-light)">${ev.summary}</span>`
+            + (ev.start.length > 10
+              ? `<br><span style="color:var(--gb-gray);font-size:10px;">${formatEventDate(ev.start)}</span>`
+              : '');
+          item.appendChild(src);
+          item.appendChild(text);
+          el.appendChild(item);
+        }
+      }
+    }
+
+    // Auth link
+    const authEl = document.getElementById('cal-modal-auth');
+    if (meta && !meta.gcal_authorized && meta.gcal_credentials) {
+      authEl.style.display = 'block';
+    } else if (meta && !meta.gcal_authorized && !meta.gcal_credentials) {
+      authEl.style.display = 'block';
+      document.getElementById('cal-auth-link').textContent = 'Google Calendar: credentials.json missing';
+      document.getElementById('cal-auth-link').removeAttribute('href');
+      document.getElementById('cal-auth-link').style.color = 'var(--gb-orange)';
+    } else {
+      authEl.style.display = 'none';
+    }
+  }
+
+  async function loadCalendar() {
+    try {
+      const res = await fetch('/calendar');
+      if (!res.ok) return;
+      const data = await res.json();
+      renderCalendarMini(data.events || []);
+      renderCalendarModal(data.events || [], data);
+    } catch { /* silently ignore */ }
+  }
+
   // ── Init ──
   loadReminders();
   loadConversations();
   loadWeather();
+  loadCalendar();
   loadBriefing();
   input.focus();
 </script>
