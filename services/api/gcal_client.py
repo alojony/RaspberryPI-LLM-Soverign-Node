@@ -22,6 +22,26 @@ GCAL_COLOR_MAP = {
     "11": "#dc2127", # Tomato
 }
 GCAL_DEFAULT_COLOR = "#4285f4"
+
+# Keywords that identify a meeting/appointment worth surfacing in briefings
+MEETING_KEYWORDS = {
+    "weekly", "monthly", "meeting", "meet", "sync", "syncup", "sync-up",
+    "standup", "stand-up", "catchup", "catch-up", "call", "1:1", "1on1",
+    "review", "interview", "demo", "retro", "retrospective", "sprint",
+    "check-in", "checkin", "session", "workshop", "webinar", "conference",
+    "onboarding", "planning", "kickoff", "debrief", "presentation",
+}
+
+
+def is_briefing_worthy(event: dict) -> bool:
+    """Return True if the event should appear in the morning briefing.
+
+    Rule: include if non-recurring, OR if title contains a meeting keyword.
+    """
+    if not event.get("recurring", False):
+        return True
+    title_words = set(event.get("summary", "").lower().replace("-", " ").split())
+    return bool(title_words & MEETING_KEYWORDS)
 CREDENTIALS_PATH = os.getenv("GCAL_CREDENTIALS_PATH", "/data/db/gcal_credentials.json")
 TOKEN_PATH = os.getenv("GCAL_TOKEN_PATH", "/data/db/gcal_token.json")
 REDIRECT_URI = os.getenv("GCAL_REDIRECT_URI", "http://127.0.0.1:8000/calendar/callback")
@@ -112,6 +132,7 @@ def list_events(days_before: int = 1, days_after: int = 35) -> list[dict]:
                 "source": "google",
                 "color": color,
                 "url": item.get("htmlLink", ""),
+                "recurring": "recurringEventId" in item,
             })
         return events
     except Exception as e:

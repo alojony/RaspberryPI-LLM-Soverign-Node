@@ -139,7 +139,10 @@ async def generate_briefing():
     import gcal_client as gcal
     today_str_full = today.isoformat()
     gcal_events = await asyncio.to_thread(gcal.list_events, 0, 1)
-    today_events = [e for e in gcal_events if e["start"].startswith(today_str_full) or e["start"][:10] == today_str_full]
+    today_events = [
+        e for e in gcal_events
+        if e["start"][:10] == today_str_full and gcal.is_briefing_worthy(e)
+    ]
     today_events.sort(key=lambda e: e["start"])
 
     lines = [f"## Morning Briefing — {today.strftime('%A, %B %-d %Y')}"]
