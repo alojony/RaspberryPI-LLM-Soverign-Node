@@ -606,8 +606,7 @@
         <button class="btn-expand" id="btn-expand-cal">&#8599;</button>
       </div>
       <div class="drawer-body" id="cal-drawer-body">
-        <div id="weather-mini" class="cal-mini-placeholder">loading&#8230;</div>
-        <div id="cal-events-mini" style="margin-top:4px;"></div>
+        <div id="cal-events-mini"></div>
       </div>
     </div>
 
@@ -1115,17 +1114,6 @@
     btn.textContent = hidden ? 'hide completed' : 'show completed';
   });
 
-  // ── Weather widget ──
-  async function loadWeather() {
-    const el = document.getElementById('weather-mini');
-    if (!el) return;
-    try {
-      const res = await fetch('/weather');
-      if (!res.ok) { el.textContent = 'weather unavailable'; return; }
-      const d = await res.json();
-      el.innerHTML = `<strong style="color:var(--gb-orange)">${d.condition}</strong><br>${d.temp_c}°C / ${d.temp_f}°F · ${d.humidity}% humidity`;
-    } catch { el.textContent = 'weather unavailable'; }
-  }
 
   // ── Briefing banner ──
   async function loadBriefing() {
@@ -1475,7 +1463,6 @@
   // ── Init ──
   loadReminders();
   loadConversations();
-  loadWeather();
   loadCalendar();
   loadBriefing();
   input.focus();

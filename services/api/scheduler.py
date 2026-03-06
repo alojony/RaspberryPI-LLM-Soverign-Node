@@ -1,4 +1,5 @@
 import logging
+import asyncio
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
 from apscheduler.jobstores.base import JobLookupError
@@ -135,6 +136,12 @@ async def generate_briefing():
     finally:
         db.close()
 
+    import gcal_client as gcal
+    today_str_full = today.isoformat()
+    gcal_events = await asyncio.to_thread(gcal.list_events, 0, 1)
+    today_events = [e for e in gcal_events if e["start"].startswith(today_str_full) or e["start"][:10] == today_str_full]
+    today_events.sort(key=lambda e: e["start"])
+
     lines = [f"## Morning Briefing — {today.strftime('%A, %B %-d %Y')}"]
     if weather_line:
         lines.append(weather_line)
@@ -144,8 +151,16 @@ async def generate_briefing():
         lines.extend(remind_lines)
     else:
         lines.append("**Reminders:** None for today.")
-    lines.append("")
-    lines.append("**Calendar:** Notion & Google Calendar integration coming soon.")
+    if today_events:
+        lines.append("")
+        lines.append("**Today's calendar:**")
+        for e in today_events:
+            if len(e["start"]) > 10:
+                from datetime import datetime as _dt
+                t = _dt.fromisoformat(e["start"]).strftime("%-I:%M %p")
+                lines.append(f"- {t}: {e['summary']}")
+            else:
+                lines.append(f"- {e['summary']}")
     content = "\n".join(lines)
 
     db = SessionLocal()

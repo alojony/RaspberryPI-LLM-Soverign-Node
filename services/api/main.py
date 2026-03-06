@@ -489,6 +489,19 @@ async def get_weather():
 
 # ── Briefing ──────────────────────────────────────────────────
 
+@app.post("/briefing/regenerate")
+async def regenerate_briefing(db: Session = Depends(get_db)):
+    import pytz
+    local_tz = pytz.timezone(LOCAL_TZ)
+    today_str = datetime.now(local_tz).date().isoformat()
+    db.query(BriefingDB).filter(BriefingDB.date == today_str).delete()
+    db.commit()
+    from scheduler import generate_briefing
+    await generate_briefing()
+    briefing = db.query(BriefingDB).filter(BriefingDB.date == today_str).first()
+    return {"ok": True, "briefing": {"date": briefing.date, "content": briefing.content} if briefing else None}
+
+
 @app.get("/briefing/today")
 async def get_briefing_today(db: Session = Depends(get_db)):
     import pytz
