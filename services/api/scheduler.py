@@ -98,7 +98,7 @@ async def generate_briefing():
     import pytz
 
     local_tz_name = os.getenv("TZ", "UTC")
-    weather_location = os.getenv("WEATHER_LOCATION", "Sacramento,CA")
+    weather_location = os.getenv("WEATHER_LOCATION", "Davis,California")
     local_tz = pytz.timezone(local_tz_name)
     today = datetime.now(local_tz).date()
     today_str = today.isoformat()
@@ -114,14 +114,14 @@ async def generate_briefing():
     weather_line = ""
     try:
         url = f"https://wttr.in/{weather_location.replace(' ', '+')}?format=j1"
-        async with httpx.AsyncClient(timeout=httpx.Timeout(connect=5.0, read=10.0, write=5.0, pool=5.0)) as client:
-            resp = await client.get(url, headers={"User-Agent": "pi-node/1.0"})
-            resp.raise_for_status()
-            data = resp.json()
-        c = data["current_condition"][0]
+        def _fetch_weather():
+            return httpx.get(url, headers={"User-Agent": "pi-node/1.0"}, timeout=15)
+        resp = await asyncio.to_thread(_fetch_weather)
+        resp.raise_for_status()
+        c = resp.json()["current_condition"][0]
         weather_line = f"**Weather:** {c['weatherDesc'][0]['value']}, {c['temp_C']}°C / {c['temp_F']}°F"
     except Exception as e:
-        logger.warning(f"[BRIEFING] weather fetch failed: {e}")
+        logger.warning(f"[BRIEFING] weather fetch failed: {type(e).__name__}: {e}")
 
     db = SessionLocal()
     try:
