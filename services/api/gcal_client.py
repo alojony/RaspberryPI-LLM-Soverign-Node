@@ -6,9 +6,25 @@ from datetime import datetime, timezone, timedelta
 logger = logging.getLogger(__name__)
 
 SCOPES = ["https://www.googleapis.com/auth/calendar"]
+
+# Standard Google Calendar colorId → hex
+GCAL_COLOR_MAP = {
+    "1": "#a4bdfc",  # Lavender
+    "2": "#7ae28c",  # Sage
+    "3": "#dbadff",  # Grape
+    "4": "#ff887c",  # Flamingo
+    "5": "#fbd75b",  # Banana
+    "6": "#ffb878",  # Tangerine
+    "7": "#46d6db",  # Peacock
+    "8": "#e1e1e1",  # Graphite
+    "9": "#5484ed",  # Blueberry
+    "10": "#51b749", # Basil
+    "11": "#dc2127", # Tomato
+}
+GCAL_DEFAULT_COLOR = "#4285f4"
 CREDENTIALS_PATH = os.getenv("GCAL_CREDENTIALS_PATH", "/data/db/gcal_credentials.json")
 TOKEN_PATH = os.getenv("GCAL_TOKEN_PATH", "/data/db/gcal_token.json")
-REDIRECT_URI = os.getenv("GCAL_REDIRECT_URI", "http://localhost:8000/calendar/callback")
+REDIRECT_URI = os.getenv("GCAL_REDIRECT_URI", "http://127.0.0.1:8000/calendar/callback")
 
 # In-memory state for the OAuth CSRF state parameter
 _flow_state: dict = {}
@@ -53,7 +69,7 @@ def _get_creds():
     return creds if creds and creds.valid else None
 
 
-def list_events(days_before: int = 1, days_after: int = 14) -> list[dict]:
+def list_events(days_before: int = 1, days_after: int = 35) -> list[dict]:
     if not is_authorized():
         return []
     try:
@@ -62,6 +78,14 @@ def list_events(days_before: int = 1, days_after: int = 14) -> list[dict]:
         if not creds:
             return []
         service = build("calendar", "v3", credentials=creds)
+
+        # Fetch calendar default color (one call, cheap)
+        try:
+            cal_info = service.calendarList().get(calendarId="primary").execute()
+            default_color = cal_info.get("backgroundColor", GCAL_DEFAULT_COLOR)
+        except Exception:
+            default_color = GCAL_DEFAULT_COLOR
+
         now = datetime.now(timezone.utc)
         time_min = (now - timedelta(days=days_before)).isoformat()
         time_max = (now + timedelta(days=days_after)).isoformat()
@@ -71,12 +95,14 @@ def list_events(days_before: int = 1, days_after: int = 14) -> list[dict]:
             timeMax=time_max,
             singleEvents=True,
             orderBy="startTime",
-            maxResults=50,
+            maxResults=200,
         ).execute()
         events = []
         for item in result.get("items", []):
             start = item["start"].get("dateTime", item["start"].get("date", ""))
             end = item["end"].get("dateTime", item["end"].get("date", ""))
+            color_id = item.get("colorId", "")
+            color = GCAL_COLOR_MAP.get(color_id, default_color)
             events.append({
                 "id": item["id"],
                 "summary": item.get("summary", "(no title)"),
@@ -84,6 +110,7 @@ def list_events(days_before: int = 1, days_after: int = 14) -> list[dict]:
                 "end": end,
                 "description": item.get("description", ""),
                 "source": "google",
+                "color": color,
                 "url": item.get("htmlLink", ""),
             })
         return events
