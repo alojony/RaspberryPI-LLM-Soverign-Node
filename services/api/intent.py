@@ -11,7 +11,8 @@ from scheduler import schedule_reminder, schedule_timer
 logger = logging.getLogger(__name__)
 
 _INTENT_RE = re.compile(
-    r'\b(remind|reminder|set a timer|timer for|set timer|alert me|ping me|don\'t let me forget|notify me)\b',
+    r'\b(remind|reminder|set a timer|timer for|set timer|alert me|ping me|don\'t let me forget|notify me'
+    r'|add (?:an? )?event|schedule (?:an? )?(?:meeting|event|appointment|call)|put (?:it |this )?on (?:my )?calendar|book (?:an? )?(?:meeting|slot|time|appointment))\b',
     re.IGNORECASE
 )
 
@@ -23,10 +24,10 @@ async def extract_intent(prompt: str, llm_url: str, local_tz: str) -> dict | Non
     extraction_prompt = (
         "<|system|>You are a data extraction assistant. Extract structured data and output only valid JSON, nothing else."
         "<|user|>Extract the intent from this message. Output JSON with exactly these fields:\n"
-        '- "intent": one of "create_reminder", "set_timer", or "none"\n'
-        '- "text": the reminder text or timer label (string)\n'
-        '- "datetime_str": for reminders, the natural language time expression (string or null)\n'
-        '- "duration_str": for timers, the natural language duration (string or null)\n\n'
+        '- "intent": one of "create_reminder", "set_timer", "create_event", or "none"\n'
+        '- "text": the reminder/timer label or calendar event title (string)\n'
+        '- "datetime_str": natural language time/date expression (string or null)\n'
+        '- "duration_str": for timers or event duration, natural language duration (string or null)\n\n'
         f'Message: "{prompt}"\n'
         '<|assistant|>{"intent":'
     )
@@ -53,13 +54,13 @@ def _parse_extraction(raw: str) -> dict | None:
     if start != -1 and end > start:
         try:
             data = json.loads(raw[start:end])
-            if data.get("intent") in ("create_reminder", "set_timer", "none"):
+            if data.get("intent") in ("create_reminder", "set_timer", "create_event", "none"):
                 return data
         except json.JSONDecodeError:
             pass
 
     intent_m = re.search(r'"intent"\s*:\s*"(\w+)"', raw)
-    if not intent_m or intent_m.group(1) not in ("create_reminder", "set_timer"):
+    if not intent_m or intent_m.group(1) not in ("create_reminder", "set_timer", "create_event"):
         return None
 
     data = {"intent": intent_m.group(1)}
@@ -199,5 +200,32 @@ async def execute_intent(extracted: dict, local_tz: str) -> tuple[str | None, st
             return None, "Something went wrong saving the timer. Try again."
         finally:
             db.close()
+
+    elif intent == "create_event":
+        import gcal_client as gcal
+        if not gcal.is_authorized():
+            return None, "Google Calendar isn't connected. Visit /calendar/auth to set it up."
+
+        dt = _resolve_datetime(extracted.get("datetime_str", ""), local_tz)
+        if dt is None:
+            return None, "I couldn't parse that date/time — try something like 'add event Friday 3pm dentist'."
+        if not text:
+            text = extracted.get("datetime_str", "event")
+
+        duration_seconds = _resolve_duration(extracted.get("duration_str", "") or "") or 3600
+        end_dt = dt + timedelta(seconds=duration_seconds)
+
+        import pytz
+        tz = pytz.timezone(local_tz)
+        start_iso = dt.astimezone(tz).isoformat()
+        end_iso = end_dt.astimezone(tz).isoformat()
+
+        try:
+            event = gcal.create_event(summary=text, start=start_iso, end=end_iso)
+            label = dt.strftime("%A, %b %-d at %-I:%M %p")
+            return f"Done — \"{text}\" added to your calendar for {label}.", None
+        except Exception as e:
+            logger.error(f"[INTENT] gcal create_event failed: {e}")
+            return None, "Couldn't create the calendar event. Check that Google Calendar is authorized."
 
     return None, None

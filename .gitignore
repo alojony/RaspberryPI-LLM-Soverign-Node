@@ -1,3 +1,5 @@
+.claude
+.claude/
 .env
 data/qdrant/*
 !data/qdrant/.gitkeep

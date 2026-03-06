@@ -41,6 +41,8 @@ WEATHER_LOCATION = os.getenv("WEATHER_LOCATION", "Davis,California")
 CHUNK_SIZE = int(os.getenv("CHUNK_SIZE", "1600"))
 CHUNK_OVERLAP = int(os.getenv("CHUNK_OVERLAP", "400"))
 EMBED_DIM = int(os.getenv("EMBED_DIM", "384"))
+SEARCH_PROVIDER = os.getenv("SEARCH_PROVIDER", "ddg")
+SEARCH_API_KEY = os.getenv("SEARCH_API_KEY", "")
 
 TOKEN_BUDGET = 3400
 
@@ -155,18 +157,52 @@ async def _build_context(req: AskRequest) -> tuple[list[str], list[str], list[st
                 sources.append(src)
 
     if req.use_web and not _is_simple(req.prompt):
+        import re as _re
+        search_query = _re.sub(r'^(hi|hey|hello)[!,.\s]+', '', req.prompt.strip(), flags=_re.IGNORECASE).strip() or req.prompt
+        raw_results = []
         try:
-            with DDGS() as ddgs:
-                web_results = list(ddgs.text(req.prompt, max_results=3))
-            for r in web_results:
-                url = r.get("href", "")
-                downloaded = await asyncio.to_thread(trafilatura.fetch_url, url, timeout=10)
-                text = trafilatura.extract(downloaded, max_chars=1500) if downloaded else r.get("body", "")
-                if text:
-                    web_snippets.append(f"[WEB: {url}]\n{text}")
-                    sources.append(url)
+            if SEARCH_PROVIDER == "brave" and SEARCH_API_KEY:
+                async with httpx.AsyncClient(timeout=10) as client:
+                    resp = await client.get(
+                        "https://api.search.brave.com/res/v1/web/search",
+                        params={"q": search_query, "count": 3, "text_decorations": False},
+                        headers={"Accept": "application/json", "X-Subscription-Token": SEARCH_API_KEY},
+                    )
+                    resp.raise_for_status()
+                    for r in resp.json().get("web", {}).get("results", []):
+                        raw_results.append({"href": r.get("url", ""), "body": r.get("description", "")})
+            elif SEARCH_PROVIDER == "serper" and SEARCH_API_KEY:
+                async with httpx.AsyncClient(timeout=10) as client:
+                    resp = await client.post(
+                        "https://google.serper.dev/search",
+                        json={"q": search_query, "num": 3},
+                        headers={"X-API-KEY": SEARCH_API_KEY, "Content-Type": "application/json"},
+                    )
+                    resp.raise_for_status()
+                    for r in resp.json().get("organic", []):
+                        raw_results.append({"href": r.get("link", ""), "body": r.get("snippet", "")})
+            else:
+                with DDGS() as ddgs:
+                    for r in ddgs.text(search_query, max_results=3):
+                        raw_results.append({"href": r.get("href", ""), "body": r.get("body", "")})
         except Exception as e:
-            logger.warning(f"Web search failed: {e}")
+            logger.warning(f"Web search failed ({SEARCH_PROVIDER}): {e}")
+
+        for r in raw_results:
+            url = r["href"]
+            snippet = r["body"]
+            text = snippet  # default to search snippet
+            try:
+                async with httpx.AsyncClient(timeout=6, follow_redirects=True) as client:
+                    page = await client.get(url, headers={"User-Agent": "Mozilla/5.0 (compatible; pi-node/1.0)"})
+                extracted = trafilatura.extract(page.text, max_chars=1500, include_tables=True)
+                if extracted and len(extracted) > len(snippet):
+                    text = extracted
+            except Exception:
+                pass
+            if text and url:
+                web_snippets.append(f"[WEB: {url}]\n{text}")
+                sources.append(url)
 
     return rag_chunks, web_snippets, list(dict.fromkeys(sources))
 

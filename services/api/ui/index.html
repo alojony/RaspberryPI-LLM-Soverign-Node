@@ -153,11 +153,14 @@
     /* ── Empty state ── */
     .empty { margin: auto; text-align: center; color: var(--gb-gray); }
     .empty .prompt { font-size: 22px; margin-bottom: 10px; color: var(--gb-orange); }
-    .empty p { font-size: 12px; line-height: 1.8; }
+    .empty p { font-size: 12px; line-height: 1.8; margin-bottom: 16px; }
     .empty code { color: var(--gb-green); background: var(--gb-dark2); padding: 1px 5px; border-radius: 3px; }
+    .empty-toggles { display: flex; gap: 12px; justify-content: center; }
+    .empty-toggles .toggle { font-size: 13px; padding: 8px 20px; }
+    .empty-toggles .toggle span { font-size: 10px; opacity: 0.6; margin-left: 6px; font-weight: 400; letter-spacing: 0; }
 
     /* ── Input bar ── */
-    footer { background: var(--gb-dark2); border-top: 1px solid var(--gb-accent); padding: 12px 20px; display: flex; gap: 10px; flex-shrink: 0; }
+    footer { background: var(--gb-dark2); border-top: 1px solid var(--gb-accent); padding: 12px 20px; display: flex; gap: 10px; flex-shrink: 0; align-items: flex-end; }
     #input { flex: 1; background: var(--gb-dark); color: var(--gb-light); font-family: var(--font-mono); font-size: 13px; border: 1px solid var(--gb-accent); border-radius: 4px; padding: 10px 14px; outline: none; resize: none; line-height: 1.5; min-height: 42px; max-height: 120px; overflow-y: auto; transition: border-color 0.15s; }
     #input:focus { border-color: var(--gb-blue); }
     #input::placeholder { color: var(--gb-gray); }
@@ -216,6 +219,18 @@
       transition: all 0.15s;
     }
     .btn-expand:hover { border-color: var(--gb-light); color: var(--gb-light); }
+    .btn-collapse {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      background: none;
+      border: none;
+      color: var(--gb-gray);
+      padding: 0 4px 0 0;
+      cursor: pointer;
+      line-height: 1;
+      flex-shrink: 0;
+    }
+    .btn-collapse:hover { color: var(--gb-light); }
     .drawer-body {
       flex: 1;
       overflow-y: auto;
@@ -562,11 +577,7 @@
 
 <header>
   <div class="logo">Pi Sovereign Node <span>// local assistant</span></div>
-  <div class="toggles">
-    <button class="toggle active-rag" id="btn-rag" title="Toggle RAG">RAG</button>
-    <button class="toggle" id="btn-web" title="Toggle web search">WEB</button>
-    <button class="btn-collapse-drawer" id="btn-collapse-drawer" title="Toggle panel">&#9616;</button>
-  </div>
+  <button class="btn-collapse-drawer" id="btn-collapse-drawer" title="Toggle panel">&#9616;</button>
 </header>
 
 <div class="layout">
@@ -579,12 +590,18 @@
     <div id="chat">
       <div class="empty" id="empty">
         <div class="prompt">></div>
-        <p>Ask anything from your vault.<br>
-        Toggle <code>RAG</code> to search your notes.<br>
-        Toggle <code>WEB</code> to search the web.</p>
+        <p>Ask anything from your vault.</p>
+        <div class="empty-toggles">
+          <button class="toggle active-rag" id="btn-rag-hero">RAG <span>search notes</span></button>
+          <button class="toggle" id="btn-web-hero">WEB <span>search web</span></button>
+        </div>
       </div>
     </div>
     <footer>
+      <div class="toggles">
+        <button class="toggle active-rag" id="btn-rag" title="Toggle RAG">RAG</button>
+        <button class="toggle" id="btn-web" title="Toggle web search">WEB</button>
+      </div>
       <textarea id="input" rows="1" placeholder="ask something..."></textarea>
       <button id="send">send</button>
     </footer>
@@ -593,15 +610,16 @@
   <aside id="right-drawer">
 
     <div id="briefing-banner" style="display:none; flex-shrink:0; border-bottom: 1px solid var(--gb-dark2);">
-      <div class="drawer-header" style="cursor:pointer;" id="briefing-header">
-        <span class="drawer-title" style="color:var(--gb-orange);">briefing</span>
-        <span id="briefing-toggle" style="font-size:10px; color:var(--gb-gray);">&#9662;</span>
+      <div class="drawer-header">
+        <button class="btn-collapse" data-target="briefing-body">&#9662;</button>
+        <span class="drawer-title" style="color:var(--gb-orange);" id="briefing-date-title">briefing</span>
       </div>
-      <div id="briefing-body" class="drawer-body" style="font-size:11px; line-height:1.7; color:var(--gb-light); max-height:180px;"></div>
+      <div id="briefing-body" class="drawer-body" style="font-size:11px; line-height:1.7; color:var(--gb-light); max-height:180px; overflow-y:auto;"></div>
     </div>
 
     <div class="drawer-section">
       <div class="drawer-header">
+        <button class="btn-collapse" data-target="cal-drawer-body">&#9662;</button>
         <span class="drawer-title cal">calendar</span>
         <button class="btn-expand" id="btn-expand-cal">&#8599;</button>
       </div>
@@ -612,6 +630,7 @@
 
     <div class="drawer-section">
       <div class="drawer-header">
+        <button class="btn-collapse" data-target="rem-drawer-body">&#9662;</button>
         <span class="drawer-title rem">reminders <span id="drawer-remind-count" style="font-size:9px;color:var(--gb-green);margin-left:4px;"></span></span>
         <button class="btn-expand" id="btn-expand-rem">&#8599;</button>
       </div>
@@ -694,17 +713,27 @@
   const empty   = document.getElementById('empty');
   const input   = document.getElementById('input');
   const sendBtn = document.getElementById('send');
-  const btnRag  = document.getElementById('btn-rag');
-  const btnWeb  = document.getElementById('btn-web');
-  const convList = document.getElementById('conv-list');
+  const btnRag     = document.getElementById('btn-rag');
+  const btnWeb     = document.getElementById('btn-web');
+  const btnRagHero = document.getElementById('btn-rag-hero');
+  const btnWebHero = document.getElementById('btn-web-hero');
+  const convList   = document.getElementById('conv-list');
 
   let useRag = true;
   let useWeb = false;
   let currentConvId = null;
 
   // ── Toggles ──
-  btnRag.addEventListener('click', () => { useRag = !useRag; btnRag.classList.toggle('active-rag', useRag); });
-  btnWeb.addEventListener('click', () => { useWeb = !useWeb; btnWeb.classList.toggle('active-web', useWeb); });
+  function syncToggles() {
+    btnRag.classList.toggle('active-rag', useRag);
+    btnRagHero.classList.toggle('active-rag', useRag);
+    btnWeb.classList.toggle('active-web', useWeb);
+    btnWebHero.classList.toggle('active-web', useWeb);
+  }
+  btnRag.addEventListener('click',     () => { useRag = !useRag; syncToggles(); });
+  btnRagHero.addEventListener('click', () => { useRag = !useRag; syncToggles(); });
+  btnWeb.addEventListener('click',     () => { useWeb = !useWeb; syncToggles(); });
+  btnWebHero.addEventListener('click', () => { useWeb = !useWeb; syncToggles(); });
 
   // ── Auto-resize textarea ──
   input.addEventListener('input', () => { input.style.height = 'auto'; input.style.height = Math.min(input.scrollHeight, 120) + 'px'; });
@@ -1124,17 +1153,31 @@
       if (!data.briefing) return;
       const banner = document.getElementById('briefing-banner');
       const body   = document.getElementById('briefing-body');
-      body.innerHTML = marked.parse(data.briefing.content);
+      // Strip the leading ## date heading — now shown as the card title
+      const content = data.briefing.content.replace(/^##[^\n]*\n/, '').trimStart();
+      body.innerHTML = marked.parse(content);
       banner.style.display = 'flex';
       banner.style.flexDirection = 'column';
-
-      document.getElementById('briefing-header').addEventListener('click', () => {
-        const isHidden = body.style.display === 'none';
-        body.style.display = isHidden ? '' : 'none';
-        document.getElementById('briefing-toggle').textContent = isHidden ? '\u25be' : '\u25b8';
-      });
+      // Set card title to the briefing date
+      const d = new Date(data.briefing.date + 'T00:00:00');
+      document.getElementById('briefing-date-title').textContent =
+        d.toLocaleDateString([], {weekday:'long', month:'long', day:'numeric'});
     } catch (e) { /* silently ignore */ }
   }
+
+  // ── Collapse/expand all drawer cards ──
+  document.querySelectorAll('.btn-collapse').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const target = document.getElementById(btn.dataset.target);
+      if (!target) return;
+      const collapsed = target.style.display === 'none';
+      target.style.display = collapsed ? '' : 'none';
+      btn.innerHTML = collapsed ? '&#9662;' : '&#9656;';
+      // Shrink the parent section to header-only when collapsed
+      const section = btn.closest('.drawer-section');
+      if (section) section.style.flex = collapsed ? '' : '0 0 auto';
+    });
+  });
 
   // ── Calendar ──
   function formatEventDate(iso) {
