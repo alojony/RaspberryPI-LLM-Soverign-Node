@@ -5,7 +5,7 @@
 
 set -e
 
-REPO_URL="https://github.com/jonpaper/pi-node.git"  # ← update this
+REPO_URL="https://github.com/alojony/RaspberryPI-LLM-Soverign-Node.git"  # ← update this
 INSTALL_DIR="$HOME/pi-node"
 COMPOSE_VERSION="v2.24.0"
 

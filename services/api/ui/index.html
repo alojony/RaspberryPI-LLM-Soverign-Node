@@ -44,6 +44,7 @@
     }
     .logo { font-size: 13px; font-weight: 700; color: var(--gb-orange); letter-spacing: 0.05em; text-transform: uppercase; flex: 1; }
     .logo span { color: var(--gb-gray); font-weight: 400; }
+    #header-clock { flex: 1; text-align: center; font-size: 13px; font-weight: 700; color: var(--gb-light); letter-spacing: 0.08em; }
     .toggles { display: flex; gap: 8px; }
     .toggle { font-family: var(--font-mono); font-size: 11px; font-weight: 700; letter-spacing: 0.08em; padding: 4px 10px; border-radius: 3px; border: 1px solid var(--gb-gray); background: transparent; color: var(--gb-gray); cursor: pointer; transition: all 0.15s; }
     .toggle.active-rag { border-color: var(--gb-green); color: var(--gb-green); }
@@ -63,6 +64,23 @@
       transition: all 0.15s;
     }
     .btn-collapse-drawer:hover { border-color: var(--gb-light); color: var(--gb-light); }
+
+    /* ── Ingest button ── */
+    .btn-ingest {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      padding: 4px 10px;
+      border-radius: 3px;
+      border: 1px solid var(--gb-orange);
+      background: transparent;
+      color: var(--gb-orange);
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .btn-ingest:hover { background: var(--gb-orange); color: var(--gb-dark); }
+    .btn-ingest:disabled { opacity: 0.4; cursor: not-allowed; }
 
     /* ── Layout ── */
     .layout { display: flex; flex: 1; overflow: hidden; }
@@ -577,6 +595,8 @@
 
 <header>
   <div class="logo">Pi Sovereign Node <span>// local assistant</span></div>
+  <div id="header-clock"></div>
+  <button class="btn-ingest" id="btn-ingest" title="Re-index vault">INGEST</button>
   <button class="btn-collapse-drawer" id="btn-collapse-drawer" title="Toggle panel">&#9616;</button>
 </header>
 
@@ -994,6 +1014,31 @@
       input.focus();
     }
   }
+
+  // ── Clock ──
+  const clockEl = document.getElementById('header-clock');
+  function updateClock() {
+    const now = new Date();
+    clockEl.textContent = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  }
+  updateClock();
+  setInterval(updateClock, 1000);
+
+  // ── Ingest ──
+  const btnIngest = document.getElementById('btn-ingest');
+  btnIngest.addEventListener('click', async () => {
+    btnIngest.disabled = true;
+    btnIngest.textContent = 'INDEXING…';
+    try {
+      const res = await fetch('/ingest', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+      const data = await res.json();
+      btnIngest.textContent = `✓ ${data.files_processed ?? 0} files`;
+      setTimeout(() => { btnIngest.textContent = 'INGEST'; btnIngest.disabled = false; }, 3000);
+    } catch {
+      btnIngest.textContent = 'ERROR';
+      setTimeout(() => { btnIngest.textContent = 'INGEST'; btnIngest.disabled = false; }, 2000);
+    }
+  });
 
   // ── Drawer collapse ──
   const btnCollapseDrawer = document.getElementById('btn-collapse-drawer');
