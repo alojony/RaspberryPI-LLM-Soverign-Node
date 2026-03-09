@@ -2,15 +2,16 @@ services:
 
   # ── LLM Runtime (llama.cpp server) ──────────────────────────
   llm:
-    image: ghcr.io/ggml-org/llama.cpp:server
+    build: ./services/llm
     container_name: pi-llm
     restart: unless-stopped
     volumes:
       - ./data/models:/data/models:ro
     environment:
       - LLAMA_ARG_MODEL=${MODEL_PATH}
-      - LLAMA_ARG_CTX_SIZE=${LLM_CTX:-4096}
+      - LLAMA_ARG_CTX_SIZE=${LLM_CTX:-2048}
       - LLAMA_ARG_N_THREADS=${LLM_THREADS:-4}
+      - LLAMA_ARG_BATCH_SIZE=${LLM_BATCH:-512}
       - LLAMA_ARG_HOST=0.0.0.0
       - LLAMA_ARG_PORT=8080
     ports:
@@ -19,9 +20,9 @@ services:
       resources:
         limits:
           cpus: "4.0"
-          memory: 6g
+          memory: 4g
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/health 2>/dev/null | grep -q '.' || exit 1"]
+      test: ["CMD", "curl", "-sf", "http://localhost:8080/health"]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -62,7 +63,7 @@ services:
           cpus: "1.0"
           memory: 1g
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:6333/healthz 2>/dev/null | grep -q '.' || exit 1"]
+      test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/localhost/6333 && echo -e \"GET /healthz HTTP/1.0\\r\\n\\r\\n\" >&3 && cat <&3 | grep -q 200'"]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -77,6 +78,11 @@ services:
       - ./data/db:/data/db
       - ${VAULT_HOST_PATH:-./data/vault}:/data/vault:ro
       - ./services/api/ui:/app/ui:ro
+    # WM8960 HAT audio — uncomment on Pi after dtoverlay=wm8960-soundcard is set in /boot/firmware/config.txt
+    # devices:
+    #   - /dev/snd:/dev/snd
+    # group_add:
+    #   - audio
     ports:
       - "${API_PORT:-8000}:8000"
     depends_on:

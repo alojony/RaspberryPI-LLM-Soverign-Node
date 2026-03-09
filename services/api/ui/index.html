@@ -917,18 +917,17 @@
 
       if (!res.ok) throw new Error(`${res.status}: ${await res.text()}`);
 
-      thinking.remove();
       const botWrap = document.createElement('div');
       botWrap.className = 'msg bot';
       const bubble = document.createElement('div');
       bubble.className = 'bubble';
       botWrap.appendChild(bubble);
-      chat.appendChild(botWrap);
       const meta = document.createElement('div');
       meta.className = 'meta';
       botWrap.appendChild(meta);
 
       let sources = [];
+      let streaming = false;
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
       let buf = '';
@@ -944,7 +943,14 @@
           if (!line.startsWith('data: ')) continue;
           const ev = JSON.parse(line.slice(6));
 
-          if (ev.type === 'token') {
+          if (ev.type === 'prefill') {
+            thinking.querySelector('.bubble').innerHTML = 'prefill<span class="dots"></span>';
+          } else if (ev.type === 'token') {
+            if (!streaming) {
+              thinking.remove();
+              chat.appendChild(botWrap);
+              streaming = true;
+            }
             bubble.dataset.raw = (bubble.dataset.raw || '') + ev.token;
             bubble.textContent = bubble.dataset.raw;
             chat.scrollTop = chat.scrollHeight;
@@ -975,6 +981,7 @@
           }
         }
       }
+      if (!streaming) thinking.remove();
     } catch (err) {
       thinking.remove();
       const msg = err.name === 'AbortError'

@@ -5,6 +5,9 @@ import hashlib
 import logging
 import json
 import asyncio
+import math
+import struct
+import wave
 import pytz
 import httpx
 from contextlib import asynccontextmanager
@@ -44,7 +47,7 @@ EMBED_DIM = int(os.getenv("EMBED_DIM", "384"))
 SEARCH_PROVIDER = os.getenv("SEARCH_PROVIDER", "ddg")
 SEARCH_API_KEY = os.getenv("SEARCH_API_KEY", "")
 
-TOKEN_BUDGET = 3400
+TOKEN_BUDGET = 1200
 
 SYSTEM_PROMPT_RAG = (
     "You are a sharp, capable assistant running on a Raspberry Pi 5 — fast, precise, and privacy-first. "
@@ -75,10 +78,34 @@ SYSTEM_PROMPT_PLAIN = (
 
 qdrant: QdrantClient = None
 
+ALERT_SOUND_PATH = Path("/app/sounds/alert.wav")
+
+
+def _ensure_alert_sound():
+    """Generate a simple 880 Hz beep WAV if it doesn't exist. No external deps."""
+    if ALERT_SOUND_PATH.exists():
+        return
+    ALERT_SOUND_PATH.parent.mkdir(parents=True, exist_ok=True)
+    sample_rate = 44100
+    duration = 0.4
+    freq = 880
+    num_samples = int(sample_rate * duration)
+    with wave.open(str(ALERT_SOUND_PATH), "w") as wf:
+        wf.setnchannels(1)
+        wf.setsampwidth(2)
+        wf.setframerate(sample_rate)
+        for i in range(num_samples):
+            t = i / sample_rate
+            envelope = min(1.0, t * 25, (duration - t) * 25)
+            sample = int(32767 * 0.6 * envelope * math.sin(2 * math.pi * freq * t))
+            wf.writeframes(struct.pack("<h", sample))
+    logger.info("[AUDIO] Alert sound generated")
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global qdrant
+    _ensure_alert_sound()
     init_db()
     # Retry loop — qdrant may still be starting when api container boots
     for attempt in range(10):
@@ -135,7 +162,7 @@ def _is_simple(prompt: str) -> bool:
     return len(prompt.strip()) < 20 or prompt.strip().lower() in CONVERSATIONAL
 
 def _estimate_tokens(text: str) -> int:
-    return max(1, len(text) // 4)
+    return max(1, int(len(text) / 4 * 1.5))
 
 async def _build_context(req: AskRequest) -> tuple[list[str], list[str], list[str]]:
     rag_chunks: list[str] = []
@@ -147,7 +174,7 @@ async def _build_context(req: AskRequest) -> tuple[list[str], list[str], list[st
             embed_resp = await client.post(f"{EMBED_URL}/embed", json={"text": req.prompt})
             embed_resp.raise_for_status()
             query_vector = embed_resp.json()["embedding"]
-        results = qdrant.search(collection_name=COLLECTION, query_vector=query_vector, limit=5)
+        results = qdrant.search(collection_name=COLLECTION, query_vector=query_vector, limit=3)
         for hit in results:
             chunk_text = hit.payload.get("text", "")
             if chunk_text:
@@ -289,7 +316,7 @@ async def ask(req: AskRequest):
     async with httpx.AsyncClient(timeout=httpx.Timeout(connect=10.0, read=120.0, write=10.0, pool=5.0)) as client:
         llm_resp = await client.post(
             f"{LLM_URL}/completion",
-            json={"prompt": f"<|system|>{system}<|user|>{full_prompt}<|assistant|>", "n_predict": 512, "stop": LLM_STOP},
+            json={"prompt": f"<|system|>{system}<|user|>{full_prompt}<|assistant|>", "n_predict": 256, "stop": LLM_STOP},
         )
         llm_resp.raise_for_status()
         answer = llm_resp.json()["content"].strip()
@@ -362,10 +389,11 @@ async def ask_stream(req: AskRequest):
                 yield f"data: {json.dumps({'type': 'token', 'token': char, 'stop': False})}\n\n"
             yield f"data: {json.dumps({'type': 'token', 'token': '', 'stop': True})}\n\n"
         else:
-            async with httpx.AsyncClient(timeout=httpx.Timeout(connect=10.0, read=120.0, write=10.0, pool=5.0)) as client:
+            yield f"data: {json.dumps({'type': 'prefill', 'message': 'Prefilling…'})}\n\n"
+            async with httpx.AsyncClient(timeout=httpx.Timeout(connect=10.0, read=300.0, write=10.0, pool=5.0)) as client:
                 async with client.stream(
                     "POST", f"{LLM_URL}/completion",
-                    json={"prompt": f"<|system|>{system}<|user|>{full_prompt}<|assistant|>", "n_predict": 512, "stream": True, "stop": LLM_STOP},
+                    json={"prompt": f"<|system|>{system}<|user|>{full_prompt}<|assistant|>", "n_predict": 256, "stream": True, "stop": LLM_STOP},
                 ) as resp:
                     async for line in resp.aiter_lines():
                         if line.startswith("data: "):

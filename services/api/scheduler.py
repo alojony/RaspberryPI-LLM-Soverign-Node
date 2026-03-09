@@ -17,8 +17,22 @@ scheduler = AsyncIOScheduler(
 )
 
 
+async def _play_alert():
+    """Play the alert WAV via aplay. Soft-fails if no audio device or aplay not available."""
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            "aplay", "-q", "/app/sounds/alert.wav",
+            stdout=asyncio.subprocess.DEVNULL,
+            stderr=asyncio.subprocess.DEVNULL,
+        )
+        await asyncio.wait_for(proc.wait(), timeout=5.0)
+    except Exception as e:
+        logger.warning(f"[AUDIO] alert playback failed: {e}")
+
+
 async def fire_reminder(reminder_id: int, text: str):
     logger.info(f"[REMINDER] #{reminder_id}: {text}")
+    await _play_alert()
     db = SessionLocal()
     try:
         record = db.query(ReminderDB).filter(ReminderDB.id == reminder_id).first()
@@ -64,6 +78,7 @@ def schedule_reminder(reminder_id: int, text: str, trigger_at, recurring: str | 
 
 async def fire_timer(timer_id: int, label: str):
     logger.info(f"Timer fired: [{timer_id}] {label}")
+    await _play_alert()
     db = SessionLocal()
     try:
         record = db.query(TimerDB).filter(TimerDB.id == timer_id).first()
